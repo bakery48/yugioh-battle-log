@@ -23,6 +23,9 @@ class BattleDialog:
         self.top.grab_set()
         self.top.focus_set()
 
+        # Suppress the IME テキスト候補 popup for the entire dialog window
+        suppress_ime_popup(self.top)
+
         self._build_ui(battle)
 
         # Center dialog over parent
@@ -44,9 +47,9 @@ class BattleDialog:
         self.date_var = tk.StringVar(
             value=battle["date"] if battle else dt_date.today().isoformat()
         )
-        _date_entry = ttk.Entry(frame, textvariable=self.date_var, width=14)
-        _date_entry.grid(row=0, column=1, sticky=tk.W, **pad)
-        suppress_ime_popup(_date_entry)
+        ttk.Entry(frame, textvariable=self.date_var, width=14).grid(
+            row=0, column=1, sticky=tk.W, **pad
+        )
         ttk.Label(frame, text="YYYY-MM-DD", foreground="gray").grid(
             row=0, column=2, sticky=tk.W
         )
@@ -95,7 +98,6 @@ class BattleDialog:
             frame, textvariable=self.defeat_reason_var, width=35
         )
         self.defeat_reason_entry.grid(row=4, column=1, columnspan=2, sticky=tk.W, **pad)
-        suppress_ime_popup(self.defeat_reason_entry)
 
         # ── Deck ──────────────────────────────────────────────────────────────
         ttk.Label(frame, text="使用デッキ *").grid(row=5, column=0, sticky=tk.E, **pad)
@@ -114,9 +116,9 @@ class BattleDialog:
         self.opponent_deck_var = tk.StringVar(
             value=battle["opponent_deck"] if battle else ""
         )
-        _opp_entry = ttk.Entry(frame, textvariable=self.opponent_deck_var, width=35)
-        _opp_entry.grid(row=6, column=1, columnspan=2, sticky=tk.W, **pad)
-        suppress_ime_popup(_opp_entry)
+        ttk.Entry(frame, textvariable=self.opponent_deck_var, width=35).grid(
+            row=6, column=1, columnspan=2, sticky=tk.W, **pad
+        )
 
         # ── Buttons ───────────────────────────────────────────────────────────
         btn_frame = ttk.Frame(frame)

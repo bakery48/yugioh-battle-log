@@ -20,6 +20,9 @@ class DeckDialog:
         self.top.grab_set()
         self.top.focus_set()
 
+        # Suppress the IME テキスト候補 popup for the entire dialog window
+        suppress_ime_popup(self.top)
+
         self._build_ui(deck)
 
         self.top.update_idletasks()
@@ -41,7 +44,6 @@ class DeckDialog:
         name_entry = ttk.Entry(frame, textvariable=self.name_var, width=32)
         name_entry.grid(row=0, column=1, sticky=tk.W, **pad)
         name_entry.focus_set()
-        suppress_ime_popup(name_entry)
 
         # ── Tags ──────────────────────────────────────────────────────────────
         ttk.Label(frame, text="タグ").grid(row=1, column=0, sticky=tk.NE, **pad)

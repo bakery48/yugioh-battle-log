@@ -7,6 +7,7 @@ from battle_tab import BattleTab
 from deck_tab import DeckTab
 from stats_tab import StatsTab
 from chart_tab import ChartTab
+from ime_utils import suppress_ime_popup
 
 
 class MainWindow:
@@ -14,6 +15,7 @@ class MainWindow:
         self.root = root
         self._setup_style()
         self._build_ui()
+        suppress_ime_popup(root)  # Covers all Entry widgets in the main window
 
     # ── Style ─────────────────────────────────────────────────────────────────
 

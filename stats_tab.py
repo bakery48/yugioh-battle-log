@@ -5,7 +5,6 @@ from tkinter import ttk
 
 import database as db
 from constants import RANKS
-from ime_utils import suppress_ime_popup
 
 
 def _pct(num: int, denom: int) -> str:
@@ -30,14 +29,14 @@ class StatsTab:
         # Row 0 – date range
         ttk.Label(filter_frame, text="期間:").grid(row=0, column=0, sticky=tk.E, padx=(0, 4), pady=3)
         self.date_from_var = tk.StringVar()
-        _ef = ttk.Entry(filter_frame, textvariable=self.date_from_var, width=12)
-        _ef.grid(row=0, column=1, padx=2)
-        suppress_ime_popup(_ef)
+        ttk.Entry(filter_frame, textvariable=self.date_from_var, width=12).grid(
+            row=0, column=1, padx=2
+        )
         ttk.Label(filter_frame, text="～").grid(row=0, column=2)
         self.date_to_var = tk.StringVar()
-        _et = ttk.Entry(filter_frame, textvariable=self.date_to_var, width=12)
-        _et.grid(row=0, column=3, padx=2)
-        suppress_ime_popup(_et)
+        ttk.Entry(filter_frame, textvariable=self.date_to_var, width=12).grid(
+            row=0, column=3, padx=2
+        )
         ttk.Label(filter_frame, text="YYYY-MM-DD", foreground="gray").grid(
             row=0, column=4, padx=6
         )
