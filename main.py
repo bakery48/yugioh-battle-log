@@ -8,18 +8,37 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import tkinter as tk
 
+import subprocess
 import database
 from main_window import MainWindow
-from ime_utils import install_ime_hook
+from ime_utils import install_ime_hook, get_status, _LOG_PATH
+
+
+def _git_hash() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
 
 
 def main() -> None:
+    git_hash = _git_hash()
+    print(f"=== 遊戯王戦績管理  commit={git_hash} ===")
+    print(f"    IMEログ: {_LOG_PATH}")
+
     database.init_db()
 
     root = tk.Tk()
-    # Install thread-local hook to suppress IME candidate popup globally
     install_ime_hook()
-    root.title("遊戯王マスターデュエル 戦績管理")
+
+    ime_status = get_status()
+    base_title  = "遊戯王マスターデュエル 戦績管理"
+    root.title(f"{base_title}  [commit:{git_hash}]{ime_status}")
+    print(f"    {ime_status}")
     root.geometry("1200x760")
     root.minsize(960, 620)
 
