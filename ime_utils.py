@@ -1,24 +1,33 @@
 """
-Suppress Windows IME prediction popup (テキスト候補) without breaking kanji conversion.
+Suppress Windows 11 IME prediction popup (テキスト候補) while keeping the
+kanji candidate list functional.
 
-Root cause
------------
-WM_IME_NOTIFY / IMN_OPENCANDIDATE is a *notification* that the IME server has
-already shown the candidate window.  Setting the message to WM_NULL in a
-WH_CALLWNDPROC hook only prevents the *app's window procedure* from seeing it —
-the popup is already visible.
+Root cause of previous failures
+---------------------------------
+ATTR_CONVERTED (0x02) is set on kana characters that were produced by
+romaji-to-kana conversion (e.g. "sa" → "さ").  We were treating this as
+"kanji conversion mode" and skipping suppression — so the prediction popup
+was never closed.
 
-Fix
-----
-In the WH_CALLWNDPROC hook, when we see IMN_OPENCANDIDATE while the composition
-is NOT in kanji-convert mode (plain kana / text-prediction phase):
+ATTR_TARGET_CONVERTED (0x01) is the *only* attribute that means "kanji
+candidate window is open and this character is the actively selected
+candidate."  We must check ONLY for that.
 
-  1. Null the message (so the window proc stays unaware).
-  2. After CallNextHookEx returns, call ImmNotifyIME(NI_CLOSECANDIDATE) to tell
-     the IME server to close the popup it just opened.
+Strategy
+---------
+WH_CALLWNDPROC hook, per-thread:
 
-A _suppressing flag prevents the resulting IMN_CLOSECANDIDATE notification from
-triggering a re-entrant ImmNotifyIME call.
+  1. WM_IME_SETCONTEXT   → clear ISC_SHOWUIALLCANDIDATEWINDOW bits.
+  2. WM_IME_NOTIFY / IMN_OPENCANDIDATE or IMN_CHANGECANDIDATE:
+       • Check composition attributes for ATTR_TARGET_CONVERTED ONLY.
+       • If absent (prediction / plain kana):
+           – Null the message so the window proc ignores it.
+           – After CallNextHookEx, call ImmNotifyIME(NI_CLOSECANDIDATE)
+             to explicitly close the popup the IME server already opened.
+       • If present (kanji candidate selection): leave untouched.
+
+A _suppressing flag prevents the resulting IMN_CLOSECANDIDATE from
+triggering a re-entrant call.
 
 No-op on non-Windows platforms.
 """
@@ -26,7 +35,7 @@ No-op on non-Windows platforms.
 import sys
 
 _hook_handle = None   # integer HHOOK
-_hook_cb     = None   # HOOKPROC — must live for the process lifetime
+_hook_cb     = None   # HOOKPROC — must stay alive for the process lifetime
 
 
 def install_ime_hook() -> None:
@@ -51,8 +60,11 @@ def install_ime_hook() -> None:
     NI_CLOSECANDIDATE            = 0x0011
 
     GCS_COMPATTR                 = 0x0010
+    # ONLY this attribute means the kanji candidate list is actively open
+    # and the character is being selected from the list.
+    # ATTR_CONVERTED (0x02) is also set for romaji→kana conversion — do NOT
+    # use it to decide "kanji mode", or we will never suppress predictions.
     ATTR_TARGET_CONVERTED        = 0x01
-    ATTR_CONVERTED               = 0x02
 
     # ── Structs ───────────────────────────────────────────────────────────────
     class CWPSTRUCT(ctypes.Structure):
@@ -68,7 +80,7 @@ def install_ime_hook() -> None:
         ctypes.c_int, wt.WPARAM, wt.LPARAM,
     )
 
-    # ── DLL handles with correct signatures ───────────────────────────────────
+    # ── DLL handles ───────────────────────────────────────────────────────────
     u32   = ctypes.windll.user32
     imm32 = ctypes.windll.imm32
     k32   = ctypes.windll.kernel32
@@ -101,10 +113,16 @@ def install_ime_hook() -> None:
     _suppressing = [False]
 
     # ── Helper ────────────────────────────────────────────────────────────────
-    def _is_converting(himc) -> bool:
+    def _in_kanji_selection(himc) -> bool:
         """
-        Return True when the IME is in kanji-convert mode (user pressed Space).
-        Return False during plain kana / text-prediction phase.
+        Return True ONLY when the user has pressed Space and the kanji
+        candidate list is showing (ATTR_TARGET_CONVERTED present).
+
+        Return False for:
+          • plain kana input       (ATTR_INPUT 0x00)
+          • romaji→kana conversion (ATTR_CONVERTED 0x02)
+          • prediction popup       (ATTR_INPUT 0x00)
+          • empty composition
         """
         try:
             n = imm32.ImmGetCompositionStringW(himc, GCS_COMPATTR, None, 0)
@@ -112,19 +130,19 @@ def install_ime_hook() -> None:
                 return False
             buf = (ctypes.c_ubyte * n)()
             imm32.ImmGetCompositionStringW(himc, GCS_COMPATTR, buf, n)
-            return any(b in (ATTR_TARGET_CONVERTED, ATTR_CONVERTED) for b in buf)
+            return any(b == ATTR_TARGET_CONVERTED for b in buf)
         except Exception:
             return True   # safe default: don't suppress on error
 
     # ── Hook procedure ────────────────────────────────────────────────────────
     def _hook(nCode: int, wParam: int, lParam: int) -> int:
-        close_info = None   # (himc, hwnd, lp_bitmask) to close after next-hook
+        close_info = None   # (himc, hwnd, lp_bitmask) – close after next-hook
 
         if nCode == HC_ACTION:
             cwp = ctypes.cast(lParam, ctypes.POINTER(CWPSTRUCT)).contents
 
             if cwp.message == WM_IME_SETCONTEXT:
-                # Clear candidate-window activation bits on focus-in
+                # Tell the IME not to show its default candidate UI on focus.
                 cwp.lParam &= ~ISC_SHOWUIALLCANDIDATEWINDOW
 
             elif (cwp.message == WM_IME_NOTIFY
@@ -132,28 +150,32 @@ def install_ime_hook() -> None:
                   and not _suppressing[0]):
                 himc = imm32.ImmGetContext(cwp.hwnd)
                 if himc:
-                    converting = _is_converting(himc)
-                    if not converting:
-                        # Text-prediction popup → null the notification and
-                        # schedule ImmNotifyIME(NI_CLOSECANDIDATE) after
-                        # CallNextHookEx so we close the already-visible popup.
+                    in_kanji = _in_kanji_selection(himc)
+                    if not in_kanji:
+                        # Prediction / plain-kana phase:
+                        # null the notification AND schedule ImmNotifyIME to
+                        # close the popup the IME server already opened.
                         close_info = (himc, cwp.hwnd, cwp.lParam)
                         cwp.message = WM_NULL
                     else:
+                        # Kanji candidate selection – leave alone.
                         imm32.ImmReleaseContext(cwp.hwnd, himc)
 
         result = u32.CallNextHookEx(_hook_handle, nCode, wParam, lParam)
 
-        # Close the prediction popup that the IME server already opened.
+        # Actively close the prediction popup after the window proc returns.
         if close_info is not None:
             himc, hwnd, bitmask = close_info
             _suppressing[0] = True
             try:
+                # Close each candidate list indicated by the bitmask.
+                closed_any = False
                 for i in range(4):
                     if bitmask & (1 << i):
                         imm32.ImmNotifyIME(himc, NI_CLOSECANDIDATE, i, 0)
-                # Fallback: also close list 0 in case bitmask was 0
-                if not bitmask:
+                        closed_any = True
+                if not closed_any:
+                    # bitmask was 0 – try closing list 0 as a fallback.
                     imm32.ImmNotifyIME(himc, NI_CLOSECANDIDATE, 0, 0)
             finally:
                 _suppressing[0] = False
@@ -168,11 +190,11 @@ def install_ime_hook() -> None:
     _hook_handle = u32.SetWindowsHookExW(
         WH_CALLWNDPROC,
         cb_addr,
-        None,                         # hMod = NULL (same-process hook)
+        None,                           # hMod = NULL (same-process, per-thread)
         k32.GetCurrentThreadId(),
     )
 
 
-# Back-compat shim (kept so old call sites compile without error)
-def suppress_ime_popup(widget) -> None:  # noqa: ARG001
+def suppress_ime_popup(widget) -> None:   # noqa: ARG001
+    """Back-compat shim – no longer needed."""
     pass
