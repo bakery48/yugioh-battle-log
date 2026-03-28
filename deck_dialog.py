@@ -4,6 +4,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Optional
 
+from ime_utils import suppress_ime_popup
+
 
 class DeckDialog:
     """Modal dialog that returns a result dict on save, or None on cancel."""
@@ -39,6 +41,7 @@ class DeckDialog:
         name_entry = ttk.Entry(frame, textvariable=self.name_var, width=32)
         name_entry.grid(row=0, column=1, sticky=tk.W, **pad)
         name_entry.focus_set()
+        suppress_ime_popup(name_entry)
 
         # ── Tags ──────────────────────────────────────────────────────────────
         ttk.Label(frame, text="タグ").grid(row=1, column=0, sticky=tk.NE, **pad)
