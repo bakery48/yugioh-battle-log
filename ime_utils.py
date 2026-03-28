@@ -232,13 +232,16 @@ def _install_tsf_sink() -> None:
         Begin_t = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p, wt.DWORD, ctypes.POINTER(wt.BOOL))
         Dword_t = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p, wt.DWORD)
 
+        # Use c_void_p fields – avoids "incompatible WinFunctionType" errors
+        # that occur when ctypes validates keyword-argument types at Structure
+        # construction time.
         class Vtbl(ctypes.Structure):
-            _fields_ = [('QI',     QI_t),
-                        ('AddRef', Ref_t),
-                        ('Release',Ref_t),
-                        ('Begin',  Begin_t),
-                        ('Update', Dword_t),
-                        ('End',    Dword_t)]
+            _fields_ = [('QI',     ctypes.c_void_p),
+                        ('AddRef', ctypes.c_void_p),
+                        ('Release',ctypes.c_void_p),
+                        ('Begin',  ctypes.c_void_p),
+                        ('Update', ctypes.c_void_p),
+                        ('End',    ctypes.c_void_p)]
 
         class SinkObj(ctypes.Structure):
             _fields_ = [('lpVtbl', ctypes.POINTER(Vtbl))]
@@ -289,8 +292,12 @@ def _install_tsf_sink() -> None:
         cb_update = Dword_t(_update)
         cb_end    = Dword_t(_end)
 
-        vtbl = Vtbl(QI=cb_qi, AddRef=cb_addref, Release=cb_release,
-                    Begin=cb_begin, Update=cb_update, End=cb_end)
+        # Store raw integer function-pointer values in the c_void_p fields.
+        def _fp(cb):
+            return ctypes.cast(cb, ctypes.c_void_p).value or 0
+
+        vtbl = Vtbl(QI=_fp(cb_qi), AddRef=_fp(cb_addref), Release=_fp(cb_release),
+                    Begin=_fp(cb_begin), Update=_fp(cb_update), End=_fp(cb_end))
         obj = SinkObj()
         obj.lpVtbl = ctypes.pointer(vtbl)
 
@@ -324,6 +331,16 @@ def _install_tsf_sink() -> None:
 
         GenQI = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p,
                                    ctypes.POINTER(GUID), ctypes.POINTER(ctypes.c_void_p))
+
+        # ── Activate thread manager ───────────────────────────────────────
+        # ITfUIElementMgr is only accessible via QI after Activate() has
+        # been called; without it QI returns E_NOINTERFACE (0x80004002).
+        ActivateT = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p,
+                                       ctypes.POINTER(wt.DWORD))
+        client_id = wt.DWORD(0)
+        hr        = _call(pTM, 3, ActivateT, ctypes.byref(client_id))
+        _log(f"ITfThreadMgr::Activate hr=0x{hr & 0xFFFFFFFF:08X} clientId={client_id.value}")
+        # Non-fatal: attempt QI even if Activate returns an error
 
         # ── QI pTM → ITfUIElementMgr ──────────────────────────────────────
         pUEM = ctypes.c_void_p()
