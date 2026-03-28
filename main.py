@@ -59,6 +59,14 @@ def main() -> None:
             pass
 
     MainWindow(root)
+
+    # Refresh the title bar every 2 s so the IME diagnostic counters stay live.
+    def _refresh_title() -> None:
+        ime_status = get_status()
+        root.title(f"{base_title}  [commit:{git_hash}]{ime_status}")
+        root.after(2000, _refresh_title)
+
+    root.after(2000, _refresh_title)
     root.mainloop()
 
 

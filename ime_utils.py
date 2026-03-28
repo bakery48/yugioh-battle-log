@@ -3,6 +3,10 @@ Suppress the Windows 11 text-prediction popup (テキスト候補).
 
 Every step is logged to %USERPROFILE%\yugioh_ime.log so you can verify
 what is and is not working without reading source code.
+
+DIAGNOSTIC COUNTERS (readable from main.py):
+  _begin_count[0]    – number of BeginUIElement callbacks received
+  _suppress_count[0] – number of those that were suppressed (pbShow=0)
 """
 
 import sys
@@ -11,6 +15,14 @@ import datetime
 
 # ── Log file ──────────────────────────────────────────────────────────────────
 _LOG_PATH = os.path.join(os.path.expanduser("~"), "yugioh_ime.log")
+
+# ── File-version stamp (modification time of this file) ──────────────────────
+try:
+    _FILE_TS = datetime.datetime.fromtimestamp(
+        os.path.getmtime(os.path.abspath(__file__))
+    ).strftime("%m%d-%H%M")
+except Exception:
+    _FILE_TS = "?"
 
 def _log(msg: str) -> None:
     try:
@@ -22,9 +34,11 @@ def _log(msg: str) -> None:
 
 
 # ── Module-level anchors ──────────────────────────────────────────────────────
-_hook_handle = None
-_hook_cb     = None
-_tsf_anchors = None
+_hook_handle    = None
+_hook_cb        = None
+_tsf_anchors    = None
+_begin_count    = [0]   # incremented every time BeginUIElement fires
+_suppress_count = [0]   # incremented every time we set pbShow=FALSE
 
 
 def install_ime_hook() -> None:
@@ -48,10 +62,12 @@ def install_ime_hook() -> None:
 
 
 def get_status() -> str:
-    """Return a one-line status string (shown in the title bar)."""
+    """Return a one-line status string (shown in the title bar, refreshed periodically)."""
     parts = []
     parts.append("WH:" + ("OK" if _hook_handle else "NG"))
     parts.append("TSF:" + ("OK" if _tsf_anchors is not None else "NG"))
+    parts.append(f"BE:{_begin_count[0]}/{_suppress_count[0]}")  # calls/suppressed
+    parts.append(f"v{_FILE_TS}")
     return "  [IME " + " ".join(parts) + "]"
 
 
@@ -238,8 +254,6 @@ def _install_tsf_sink() -> None:
         def _addref(this):  return 2
         def _release(this): return 1
 
-        _begin_count = [0]
-
         def _begin(this, eid, pb):
             _begin_count[0] += 1
             try:
@@ -250,9 +264,15 @@ def _install_tsf_sink() -> None:
                     if himc:
                         kanji = _in_kanji_selection(imm32, himc)
                         imm32.ImmReleaseContext(hwnd, himc)
+                    else:
+                        _log(f"  BeginUIElement #{_begin_count[0]} eid={eid} hwnd={hwnd} himc=NULL")
+                else:
+                    _log(f"  BeginUIElement #{_begin_count[0]} eid={eid} hwnd=NULL (no focus)")
                 pb[0] = 1 if kanji else 0
+                if not kanji:
+                    _suppress_count[0] += 1
                 _log(f"  BeginUIElement #{_begin_count[0]} eid={eid} "
-                     f"kanji={kanji} → pbShow={pb[0]}")
+                     f"hwnd={hwnd} kanji={kanji} → pbShow={pb[0]}")
             except Exception as e:
                 _log(f"  BeginUIElement error: {e}")
                 pb[0] = 1
@@ -325,8 +345,7 @@ def _install_tsf_sink() -> None:
             _tsf_anchors = (obj, vtbl, pTM, pUEM, cookie,
                             cb_qi, cb_addref, cb_release,
                             cb_begin, cb_update, cb_end,
-                            _qi, _addref, _release, _begin, _update, _end,
-                            _begin_count)
+                            _qi, _addref, _release, _begin, _update, _end)
             _log("TSF ITfUIElementSink installed successfully")
         else:
             _log("AdviseUIElementSink FAILED — TSF suppression inactive")
