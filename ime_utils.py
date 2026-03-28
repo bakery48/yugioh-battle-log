@@ -1,34 +1,24 @@
 """
 Suppress Windows IME prediction popup (テキスト候補) without breaking kanji conversion.
 
-Root cause of previous failures
----------------------------------
-WM_IME_SETCONTEXT fires only when a window *gains focus*. The prediction
-popup that appears while typing is opened by a different message:
+Root cause
+-----------
+WM_IME_NOTIFY / IMN_OPENCANDIDATE is a *notification* that the IME server has
+already shown the candidate window.  Setting the message to WM_NULL in a
+WH_CALLWNDPROC hook only prevents the *app's window procedure* from seeing it —
+the popup is already visible.
 
-    WM_IME_NOTIFY  wParam = IMN_OPENCANDIDATE (0x0001)
+Fix
+----
+In the WH_CALLWNDPROC hook, when we see IMN_OPENCANDIDATE while the composition
+is NOT in kanji-convert mode (plain kana / text-prediction phase):
 
-This is sent by the IME every time it wants to show or refresh the
-floating candidate list.
+  1. Null the message (so the window proc stays unaware).
+  2. After CallNextHookEx returns, call ImmNotifyIME(NI_CLOSECANDIDATE) to tell
+     the IME server to close the popup it just opened.
 
-Strategy
----------
-Install a thread-local WH_CALLWNDPROC hook once at startup.  In the hook:
-
-  1. WM_IME_SETCONTEXT  →  clear ISC_SHOWUIALLCANDIDATEWINDOW bits so
-     the classic candidate window is never activated on focus-in.
-
-  2. WM_IME_NOTIFY / IMN_OPENCANDIDATE or IMN_CHANGECANDIDATE
-     →  check whether the composition string is in *kanji-convert mode*
-        (ATTR_TARGET_CONVERTED / ATTR_CONVERTED set by ImmGetCompositionString).
-     • If NOT converting  →  this is a text-prediction popup; suppress it
-       by replacing the message with WM_NULL.
-     • If converting      →  this is the normal kanji-candidate list the
-       user triggered with Space; leave it alone.
-
-Modifying the CWPSTRUCT pointed to by lParam in a WH_CALLWNDPROC hook
-is defined behaviour: Windows reads the (possibly modified) struct when
-it calls the window procedure.
+A _suppressing flag prevents the resulting IMN_CLOSECANDIDATE notification from
+triggering a re-entrant ImmNotifyIME call.
 
 No-op on non-Windows platforms.
 """
@@ -58,12 +48,13 @@ def install_ime_hook() -> None:
     IMN_OPENCANDIDATE            = 0x0001
     IMN_CHANGECANDIDATE          = 0x0002
     ISC_SHOWUIALLCANDIDATEWINDOW = 0x0000000F
+    NI_CLOSECANDIDATE            = 0x0011
 
     GCS_COMPATTR                 = 0x0010
     ATTR_TARGET_CONVERTED        = 0x01
     ATTR_CONVERTED               = 0x02
 
-    # ── Struct ────────────────────────────────────────────────────────────────
+    # ── Structs ───────────────────────────────────────────────────────────────
     class CWPSTRUCT(ctypes.Structure):
         _fields_ = [
             ("lParam",  wt.LPARAM),
@@ -101,13 +92,19 @@ def install_ime_hook() -> None:
     imm32.ImmGetCompositionStringW.argtypes = [
         ctypes.c_void_p, wt.DWORD, ctypes.c_void_p, wt.DWORD,
     ]
+    imm32.ImmNotifyIME.restype  = ctypes.c_bool
+    imm32.ImmNotifyIME.argtypes = [
+        ctypes.c_void_p, wt.DWORD, wt.DWORD, wt.DWORD,
+    ]
+
+    # ── Re-entrancy guard ─────────────────────────────────────────────────────
+    _suppressing = [False]
 
     # ── Helper ────────────────────────────────────────────────────────────────
     def _is_converting(himc) -> bool:
         """
-        Return True when the IME composition is in kanji-convert mode
-        (user pressed Space).  Return False during plain kana input
-        (text-prediction phase).
+        Return True when the IME is in kanji-convert mode (user pressed Space).
+        Return False during plain kana / text-prediction phase.
         """
         try:
             n = imm32.ImmGetCompositionStringW(himc, GCS_COMPATTR, None, 0)
@@ -121,6 +118,8 @@ def install_ime_hook() -> None:
 
     # ── Hook procedure ────────────────────────────────────────────────────────
     def _hook(nCode: int, wParam: int, lParam: int) -> int:
+        close_info = None   # (himc, hwnd, lp_bitmask) to close after next-hook
+
         if nCode == HC_ACTION:
             cwp = ctypes.cast(lParam, ctypes.POINTER(CWPSTRUCT)).contents
 
@@ -128,18 +127,39 @@ def install_ime_hook() -> None:
                 # Clear candidate-window activation bits on focus-in
                 cwp.lParam &= ~ISC_SHOWUIALLCANDIDATEWINDOW
 
-            elif cwp.message == WM_IME_NOTIFY and cwp.wParam in (
-                IMN_OPENCANDIDATE, IMN_CHANGECANDIDATE
-            ):
+            elif (cwp.message == WM_IME_NOTIFY
+                  and cwp.wParam in (IMN_OPENCANDIDATE, IMN_CHANGECANDIDATE)
+                  and not _suppressing[0]):
                 himc = imm32.ImmGetContext(cwp.hwnd)
                 if himc:
                     converting = _is_converting(himc)
-                    imm32.ImmReleaseContext(cwp.hwnd, himc)
                     if not converting:
-                        # Prediction popup (kana-input phase) → swallow
+                        # Text-prediction popup → null the notification and
+                        # schedule ImmNotifyIME(NI_CLOSECANDIDATE) after
+                        # CallNextHookEx so we close the already-visible popup.
+                        close_info = (himc, cwp.hwnd, cwp.lParam)
                         cwp.message = WM_NULL
+                    else:
+                        imm32.ImmReleaseContext(cwp.hwnd, himc)
 
-        return u32.CallNextHookEx(_hook_handle, nCode, wParam, lParam)
+        result = u32.CallNextHookEx(_hook_handle, nCode, wParam, lParam)
+
+        # Close the prediction popup that the IME server already opened.
+        if close_info is not None:
+            himc, hwnd, bitmask = close_info
+            _suppressing[0] = True
+            try:
+                for i in range(4):
+                    if bitmask & (1 << i):
+                        imm32.ImmNotifyIME(himc, NI_CLOSECANDIDATE, i, 0)
+                # Fallback: also close list 0 in case bitmask was 0
+                if not bitmask:
+                    imm32.ImmNotifyIME(himc, NI_CLOSECANDIDATE, 0, 0)
+            finally:
+                _suppressing[0] = False
+                imm32.ImmReleaseContext(hwnd, himc)
+
+        return result
 
     # ── Install ───────────────────────────────────────────────────────────────
     _hook_cb = HOOKPROC(_hook)
