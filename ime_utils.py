@@ -38,6 +38,13 @@ def install_ime_hook() -> None:
     _install_tsf_sink()
     _log(f"WH hook handle : {_hook_handle}")
     _log(f"TSF anchors set: {_tsf_anchors is not None}")
+    # Also dump the log to stdout so the console always shows what happened
+    try:
+        with open(_LOG_PATH, "r", encoding="utf-8") as _f:
+            for _line in _f:
+                print("  LOG|", _line, end="")
+    except Exception:
+        pass
 
 
 def get_status() -> str:
@@ -210,10 +217,12 @@ def _install_tsf_sink() -> None:
         Dword_t = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p, wt.DWORD)
 
         class Vtbl(ctypes.Structure):
-            _fields_ = [('QI',Ref_t),('AddRef',Ref_t),('Release',Ref_t),
-                        ('Begin',Begin_t),('Update',Dword_t),('End',Dword_t)]
-        # Correct the QI field type (it has different args than Ref_t)
-        Vtbl._fields_[0] = ('QI', QI_t)
+            _fields_ = [('QI',     QI_t),
+                        ('AddRef', Ref_t),
+                        ('Release',Ref_t),
+                        ('Begin',  Begin_t),
+                        ('Update', Dword_t),
+                        ('End',    Dword_t)]
 
         class SinkObj(ctypes.Structure):
             _fields_ = [('lpVtbl', ctypes.POINTER(Vtbl))]
