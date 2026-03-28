@@ -71,8 +71,9 @@ def install_ime_hook() -> None:
     u32.SetWindowsHookExW.argtypes = [
         ctypes.c_int, ctypes.c_void_p, wt.HINSTANCE, wt.DWORD,
     ]
-    u32.GetCurrentThreadId.restype  = wt.DWORD
-    u32.GetCurrentThreadId.argtypes = []
+    k32 = ctypes.windll.kernel32
+    k32.GetCurrentThreadId.restype  = wt.DWORD
+    k32.GetCurrentThreadId.argtypes = []
 
     def _hook(nCode: int, wParam: int, lParam: int) -> int:
         if nCode == HC_ACTION:
@@ -89,7 +90,7 @@ def install_ime_hook() -> None:
         WH_CALLWNDPROC,
         cb_addr,
         None,                          # hMod = NULL for same-process hook
-        u32.GetCurrentThreadId(),
+        k32.GetCurrentThreadId(),
     )
 
 
