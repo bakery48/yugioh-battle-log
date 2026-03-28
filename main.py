@@ -10,12 +10,15 @@ import tkinter as tk
 
 import database
 from main_window import MainWindow
+from ime_utils import install_ime_hook
 
 
 def main() -> None:
     database.init_db()
 
     root = tk.Tk()
+    # Install thread-local hook to suppress IME candidate popup globally
+    install_ime_hook()
     root.title("遊戯王マスターデュエル 戦績管理")
     root.geometry("1200x760")
     root.minsize(960, 620)

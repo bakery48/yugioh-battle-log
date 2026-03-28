@@ -1,101 +1,101 @@
 """
-Suppress the Windows 11 IME candidate popup (テキスト候補 / 変換候補).
+Suppress the Windows IME candidate popup (テキスト候補 / 変換候補).
 
-Why the previous approach failed
----------------------------------
-* Tk on Windows routes ALL WM_IME_* messages through the *Toplevel* window
-  procedure, not through individual child widget (Entry) HWNDs.
-* Child widgets do NOT fire the <Map> virtual event on Windows, so the
-  <Map>-based deferred install was never called.
-* The WINFUNCTYPE object was passed where c_ssize_t (LONG_PTR) was expected
-  without an explicit address cast, silently passing garbage.
+Why window-subclassing failed
+------------------------------
+Tk routes WM_IME_* messages through an internal "focus proxy" HWND rather
+than directly to individual child widgets.  There is no single, stable HWND
+we can subclass to catch every relevant WM_IME_SETCONTEXT call.
 
-Fix
----
-1. Call ``suppress_ime_popup(toplevel)`` once per dialog / root window.
-2. Subclass the Toplevel HWND immediately (no <Map> needed; Win32 HWNDs are
-   synchronously created when Tk widgets are instantiated).
-3. In the new WNDPROC, intercept WM_IME_SETCONTEXT and clear the
-   ISC_SHOWUIALLCANDIDATEWINDOW bits before forwarding to Tk.
-4. Use explicit ``ctypes.cast(cb, ctypes.c_void_p).value`` to obtain the
-   raw function-pointer integer required by SetWindowLongPtrW.
+Solution: thread-local WH_CALLWNDPROC hook
+-------------------------------------------
+SetWindowsHookExW(WH_CALLWNDPROC, ..., threadId) installs a hook that is
+called for *every* SendMessage on the current thread, before the target
+window proc runs.  The hook receives a writable CWPSTRUCT pointer, so we
+can clear ISC_SHOWUIALLCANDIDATEWINDOW in lParam and the window proc will
+see the modified value — effectively preventing all candidate windows from
+being drawn, for every widget in the application.
 
+Call ``install_ime_hook()`` once, at application startup.
 No-op on non-Windows platforms.
 """
 
 import sys
-from typing import Any
 
-# hwnd -> {"cb": WNDPROC callback, "old": int}  — keeps callbacks alive
-_registry: dict[int, dict[str, Any]] = {}
+_hook_handle = None   # raw integer HHOOK (kept to pass to CallNextHookEx)
+_hook_cb     = None   # HOOKPROC object — must stay alive for the process lifetime
 
 
-def suppress_ime_popup(widget) -> None:
+def install_ime_hook() -> None:
     """
-    Suppress the IME candidate popup for the Toplevel that owns *widget*.
+    Install a thread-local WH_CALLWNDPROC hook that suppresses the IME
+    candidate window for every window on the calling thread.
 
-    Recommended usage – call once per dialog::
-
-        self.top = tk.Toplevel(parent)
-        ...
-        suppress_ime_popup(self.top)
-
-    Safe to call multiple times on the same window (idempotent).
+    Call once from ``main.py`` after ``tk.Tk()`` is created.
     """
-    if sys.platform != "win32":
+    global _hook_handle, _hook_cb
+
+    if sys.platform != "win32" or _hook_handle is not None:
         return
 
     import ctypes
     import ctypes.wintypes as wt
 
+    WH_CALLWNDPROC               = 4
+    HC_ACTION                    = 0
     WM_IME_SETCONTEXT            = 0x0281
-    ISC_SHOWUIALLCANDIDATEWINDOW = 0x0000000F   # bits 0-3
-    GWLP_WNDPROC                 = -4
+    ISC_SHOWUIALLCANDIDATEWINDOW = 0x0000000F   # bits 0-3: 4 candidate panels
+
+    # CWPSTRUCT — the writable message info passed to WH_CALLWNDPROC hooks
+    class CWPSTRUCT(ctypes.Structure):
+        _fields_ = [
+            ("lParam",  wt.LPARAM),
+            ("wParam",  wt.WPARAM),
+            ("message", wt.UINT),
+            ("hwnd",    wt.HWND),
+        ]
+
+    HOOKPROC = ctypes.WINFUNCTYPE(
+        ctypes.c_longlong,
+        ctypes.c_int,   # nCode
+        wt.WPARAM,      # wParam
+        wt.LPARAM,      # lParam  (pointer to CWPSTRUCT)
+    )
 
     u32 = ctypes.windll.user32
-    # LONG_PTR = c_ssize_t (pointer-width signed int, 64-bit on Win64)
-    _LP = ctypes.c_ssize_t
-    u32.SetWindowLongPtrW.restype  = _LP
-    u32.SetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int, _LP]
-    u32.CallWindowProcW.restype    = _LP
-    u32.CallWindowProcW.argtypes   = [_LP, wt.HWND, ctypes.c_uint, wt.WPARAM, wt.LPARAM]
-    u32.DefWindowProcW.restype     = _LP
-    u32.DefWindowProcW.argtypes    = [wt.HWND, ctypes.c_uint, wt.WPARAM, wt.LPARAM]
+    u32.CallNextHookEx.restype    = ctypes.c_longlong
+    u32.CallNextHookEx.argtypes   = [
+        ctypes.c_void_p, ctypes.c_int, wt.WPARAM, wt.LPARAM,
+    ]
+    u32.SetWindowsHookExW.restype  = ctypes.c_void_p
+    u32.SetWindowsHookExW.argtypes = [
+        ctypes.c_int, ctypes.c_void_p, wt.HINSTANCE, wt.DWORD,
+    ]
+    u32.GetCurrentThreadId.restype  = wt.DWORD
+    u32.GetCurrentThreadId.argtypes = []
 
-    WNDPROC = ctypes.WINFUNCTYPE(_LP, wt.HWND, ctypes.c_uint, wt.WPARAM, wt.LPARAM)
+    def _hook(nCode: int, wParam: int, lParam: int) -> int:
+        if nCode == HC_ACTION:
+            cwp = ctypes.cast(lParam, ctypes.POINTER(CWPSTRUCT)).contents
+            if cwp.message == WM_IME_SETCONTEXT:
+                # Clear candidate-window bits; keep composition window bit
+                cwp.lParam &= ~ISC_SHOWUIALLCANDIDATEWINDOW
+        return u32.CallNextHookEx(_hook_handle, nCode, wParam, lParam)
 
-    def _install() -> None:
-        try:
-            # Always target the enclosing Toplevel / Tk root
-            tl   = widget.winfo_toplevel()
-            hwnd = tl.winfo_id()
-        except Exception:
-            return
+    _hook_cb = HOOKPROC(_hook)
+    cb_addr  = ctypes.cast(_hook_cb, ctypes.c_void_p).value or 0
 
-        if not hwnd or hwnd in _registry:
-            return
+    _hook_handle = u32.SetWindowsHookExW(
+        WH_CALLWNDPROC,
+        cb_addr,
+        None,                          # hMod = NULL for same-process hook
+        u32.GetCurrentThreadId(),
+    )
 
-        def _proc(h: int, msg: int, wp: int, lp: int) -> int:
-            rec = _registry.get(h)
-            if rec is None:
-                return u32.DefWindowProcW(h, msg, wp, lp)
-            if msg == WM_IME_SETCONTEXT:
-                lp &= ~ISC_SHOWUIALLCANDIDATEWINDOW
-            return u32.CallWindowProcW(rec["old"], h, msg, wp, lp)
 
-        cb = WNDPROC(_proc)
-        # CRITICAL: cast the WINFUNCTYPE object to a raw void-pointer integer.
-        # Passing the object directly when argtypes expects c_ssize_t would
-        # silently truncate / corrupt the value on 64-bit Windows.
-        cb_addr = ctypes.cast(cb, ctypes.c_void_p).value or 0
-
-        old = int(u32.SetWindowLongPtrW(hwnd, GWLP_WNDPROC, _LP(cb_addr)))
-        _registry[hwnd] = {"cb": cb, "old": old}
-
-    # Win32 HWNDs are created synchronously — install right away.
-    _install()
-    # Belt-and-suspenders: retry after Tk has fully initialised the window.
-    try:
-        widget.after(0, _install)
-    except Exception:
-        pass
+# ---------------------------------------------------------------------------
+# Back-compat shim: old callers used suppress_ime_popup(widget).
+# Now a no-op because the thread hook covers every window automatically.
+# ---------------------------------------------------------------------------
+def suppress_ime_popup(widget) -> None:  # noqa: ARG001
+    pass

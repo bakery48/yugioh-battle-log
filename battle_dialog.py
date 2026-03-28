@@ -7,7 +7,6 @@ from datetime import date as dt_date
 from typing import Optional
 
 from constants import RANKS, FIRST_SECOND_OPTIONS, RESULT_OPTIONS
-from ime_utils import suppress_ime_popup
 
 
 class BattleDialog:
@@ -22,9 +21,6 @@ class BattleDialog:
         self.top.resizable(False, False)
         self.top.grab_set()
         self.top.focus_set()
-
-        # Suppress the IME テキスト候補 popup for the entire dialog window
-        suppress_ime_popup(self.top)
 
         self._build_ui(battle)
 

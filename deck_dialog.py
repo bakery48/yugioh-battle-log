@@ -4,7 +4,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Optional
 
-from ime_utils import suppress_ime_popup
 
 
 class DeckDialog:
@@ -19,9 +18,6 @@ class DeckDialog:
         self.top.resizable(False, False)
         self.top.grab_set()
         self.top.focus_set()
-
-        # Suppress the IME テキスト候補 popup for the entire dialog window
-        suppress_ime_popup(self.top)
 
         self._build_ui(deck)
 
