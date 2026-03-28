@@ -15,12 +15,20 @@ from ime_utils import install_ime_hook, get_status, _LOG_PATH
 
 
 def _git_hash() -> str:
+    # Try git first (works in a cloned repo)
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=os.path.dirname(os.path.abspath(__file__)),
             stderr=subprocess.DEVNULL,
         ).decode().strip()
+    except Exception:
+        pass
+    # Fall back to version.txt (present in downloaded zips)
+    try:
+        vfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt")
+        with open(vfile, encoding="utf-8") as f:
+            return f.read().strip()[:8]
     except Exception:
         return "unknown"
 
