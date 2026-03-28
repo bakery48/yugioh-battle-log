@@ -1,37 +1,24 @@
 """
-Suppress the Windows 11 text-prediction popup (テキスト候補) for ALL input
-(ASCII and Japanese) while keeping the kanji candidate list functional.
+Suppress the Windows 11 text-prediction popup (テキスト候補).
 
-Root cause
------------
-The popup is a TSF (Text Services Framework) UI element, not a traditional
-IME candidate window.  It fires for plain ASCII (".dfd") as well as kana.
-WM_IME_NOTIFY / ImmNotifyIME have zero effect on it.
+The popup is a TSF UI element (fires for ASCII and Japanese alike).
+Primary fix: ITfUIElementSink.BeginUIElement → set *pbShow = FALSE.
+Secondary:   WH_CALLWNDPROC fallback for WM_IME_* messages.
 
-Fix
-----
-Implement ITfUIElementSink via ctypes COM and advise it with
-ITfUIElementMgr::AdviseUIElementSink.
-
-In BeginUIElement:
-  • Check GCS_COMPATTR for ATTR_TARGET_CONVERTED (0x01) — the only attribute
-    set when the kanji candidate list is open (user pressed Space).
-  • If absent  → prediction / plain typing → set *pbShow = FALSE (suppress).
-  • If present → kanji selection           → set *pbShow = TRUE  (allow).
-
-The WH_CALLWNDPROC hook is kept as a belt-and-suspenders fallback that also
-suppresses WM_IME_REQUEST / IMR_DOCUMENTFEED (denies surrounding-text context
-to the prediction engine).
+Critical ctypes rule: WINFUNCTYPE callback objects stored in a struct field
+are NOT kept alive by ctypes.  They must be held in a Python variable for
+the process lifetime, otherwise the thunk is freed and the vtable entry
+becomes a dangling pointer.
 """
 
 import sys
 
+# Module-level anchors to prevent garbage collection
 _hook_handle = None
 _hook_cb     = None
-_tsf_refs    = None   # keeps every COM/ctypes object alive
+_tsf_anchors = None   # tuple of every ctypes object that must stay alive
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 def install_ime_hook() -> None:
     """Call once after tk.Tk() is created."""
     if sys.platform != "win32":
@@ -40,12 +27,13 @@ def install_ime_hook() -> None:
     _install_tsf_sink()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── shared IMM helper ───────────────────────────────────────────────────────
+
 def _in_kanji_selection(imm32, himc) -> bool:
-    """True only while the kanji candidate list is open (ATTR_TARGET_CONVERTED)."""
+    """True ONLY when the kanji candidate list is open (ATTR_TARGET_CONVERTED)."""
     import ctypes
-    GCS_COMPATTR       = 0x0010
-    ATTR_TARGET_CONV   = 0x01
+    GCS_COMPATTR     = 0x0010
+    ATTR_TARGET_CONV = 0x01
     try:
         n = imm32.ImmGetCompositionStringW(himc, GCS_COMPATTR, None, 0)
         if n <= 0:
@@ -57,7 +45,8 @@ def _in_kanji_selection(imm32, himc) -> bool:
         return True   # safe: don't suppress on error
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── WH_CALLWNDPROC hook (secondary / fallback) ──────────────────────────────
+
 def _install_wh_hook() -> None:
     global _hook_handle, _hook_cb
     if _hook_handle is not None:
@@ -115,8 +104,7 @@ def _install_wh_hook() -> None:
             cwp = ctypes.cast(lParam, ctypes.POINTER(CWPSTRUCT)).contents
             if cwp.message == WM_IME_SETCONTEXT:
                 cwp.lParam &= ~ISC_SHOWUIALLCANDIDATEWINDOW
-            elif (cwp.message == WM_IME_REQUEST and cwp.wParam == IMR_DOCUMENTFEED):
-                # Deny surrounding-text context → prediction engine has nothing to work with
+            elif cwp.message == WM_IME_REQUEST and cwp.wParam == IMR_DOCUMENTFEED:
                 cwp.message = WM_NULL
             elif (cwp.message == WM_IME_NOTIFY
                   and cwp.wParam in (IMN_OPENCANDIDATE, IMN_CHANGECANDIDATE)
@@ -155,13 +143,12 @@ def _install_wh_hook() -> None:
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─── TSF ITfUIElementSink (primary fix) ──────────────────────────────────────
+
 def _install_tsf_sink() -> None:
-    """
-    Install ITfUIElementSink via TSF COM to suppress the Windows 11
-    text-prediction popup at the source.
-    """
-    global _tsf_refs
+    global _tsf_anchors
+    if _tsf_anchors is not None:
+        return
     try:
         import ctypes, ctypes.wintypes as wt, struct
 
@@ -174,35 +161,33 @@ def _install_tsf_sink() -> None:
         imm32.ImmReleaseContext.restype  = ctypes.c_bool
         imm32.ImmReleaseContext.argtypes = [wt.HWND, ctypes.c_void_p]
         imm32.ImmGetCompositionStringW.restype  = ctypes.c_long
-        imm32.ImmGetCompositionStringW.argtypes = [ctypes.c_void_p, wt.DWORD, ctypes.c_void_p, wt.DWORD]
+        imm32.ImmGetCompositionStringW.argtypes = [
+            ctypes.c_void_p, wt.DWORD, ctypes.c_void_p, wt.DWORD]
         u32.GetFocus.restype  = wt.HWND
         u32.GetFocus.argtypes = []
 
-        HRESULT = ctypes.c_long
-        S_OK            = 0
-        E_NOINTERFACE   = ctypes.c_long(0x80004002).value
+        HRESULT       = ctypes.c_long
+        S_OK          = 0
+        E_NOINT       = ctypes.c_long(0x80004002).value
 
         # ── GUID ──────────────────────────────────────────────────────────
         class GUID(ctypes.Structure):
             _fields_ = [('b', ctypes.c_byte * 16)]
 
         def _g(s):
-            s = s.strip('{}')
-            p = s.split('-')
-            d1, d2, d3 = int(p[0], 16), int(p[1], 16), int(p[2], 16)
+            s = s.strip('{}'); p = s.split('-')
+            d1, d2, d3 = int(p[0],16), int(p[1],16), int(p[2],16)
             d4 = bytes.fromhex(p[3] + p[4])
             raw = struct.pack('<IHH8s', d1, d2, d3, d4)
-            g = GUID()
-            ctypes.memmove(g.b, raw, 16)
-            return g
+            g = GUID(); ctypes.memmove(g.b, raw, 16); return g
 
-        CLSID_TF_ThreadMgr  = _g('{529A9E6B-6587-4F23-AB9E-9C7D683E3C50}')
-        IID_ITfThreadMgr    = _g('{AA80E801-2021-11D2-93E0-0060B067B86E}')
-        IID_ITfUIElemMgr    = _g('{EA1EA136-19DF-11D7-A6D2-00065B84435C}')
-        IID_ITfUIElemSink   = _g('{EA1EA135-19DF-11D7-A6D2-00065B84435C}')
-        IID_IUnknown        = _g('{00000000-0000-0000-C000-000000000046}')
+        CLSID_TF_ThreadMgr = _g('{529A9E6B-6587-4F23-AB9E-9C7D683E3C50}')
+        IID_ITfThreadMgr   = _g('{AA80E801-2021-11D2-93E0-0060B067B86E}')
+        IID_ITfUIElemMgr   = _g('{EA1EA136-19DF-11D7-A6D2-00065B84435C}')
+        IID_ITfUIElemSink  = _g('{EA1EA135-19DF-11D7-A6D2-00065B84435C}')
+        IID_IUnknown       = _g('{00000000-0000-0000-C000-000000000046}')
 
-        # ── COM vtable prototypes ─────────────────────────────────────────
+        # ── Vtable WINFUNCTYPE prototypes ─────────────────────────────────
         QI_t    = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p,
                                      ctypes.POINTER(GUID),
                                      ctypes.POINTER(ctypes.c_void_p))
@@ -211,7 +196,8 @@ def _install_tsf_sink() -> None:
                                      wt.DWORD, ctypes.POINTER(wt.BOOL))
         Dword_t = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p, wt.DWORD)
 
-        class _Vtbl(ctypes.Structure):
+        # ── Vtable and COM object structures ──────────────────────────────
+        class Vtbl(ctypes.Structure):
             _fields_ = [
                 ('QI',     QI_t),
                 ('AddRef', Ref_t),
@@ -221,10 +207,10 @@ def _install_tsf_sink() -> None:
                 ('End',    Dword_t),
             ]
 
-        class _Obj(ctypes.Structure):
-            _fields_ = [('lpVtbl', ctypes.POINTER(_Vtbl))]
+        class SinkObj(ctypes.Structure):
+            _fields_ = [('lpVtbl', ctypes.POINTER(Vtbl))]
 
-        # ── Sink implementations ──────────────────────────────────────────
+        # ── Sink implementation functions ─────────────────────────────────
         unk_bytes  = bytes(IID_IUnknown.b)
         sink_bytes = bytes(IID_ITfUIElemSink.b)
 
@@ -233,42 +219,53 @@ def _install_tsf_sink() -> None:
                 ppv[0] = this
                 return S_OK
             ppv[0] = 0
-            return E_NOINTERFACE
+            return E_NOINT
 
         def _addref(this):  return 2
         def _release(this): return 1
 
         def _begin(this, eid, pb):
-            """Suppress prediction; allow kanji candidate (ATTR_TARGET_CONVERTED)."""
+            """Suppress prediction/completion; allow kanji candidate list."""
             try:
                 hwnd = u32.GetFocus()
+                kanji = False
                 if hwnd:
                     himc = imm32.ImmGetContext(hwnd)
                     if himc:
                         kanji = _in_kanji_selection(imm32, himc)
                         imm32.ImmReleaseContext(hwnd, himc)
-                        pb[0] = wt.BOOL(1 if kanji else 0)
-                        return S_OK
+                    # himc == 0 means no IME context → not kanji → suppress
+                pb[0] = 1 if kanji else 0
             except Exception:
-                pass
-            pb[0] = wt.BOOL(1)   # allow on error
+                pb[0] = 1   # allow on unexpected error
             return S_OK
 
         def _update(this, eid): return S_OK
         def _end(this, eid):    return S_OK
 
-        vtbl = _Vtbl(
-            QI=QI_t(_qi), AddRef=Ref_t(_addref), Release=Ref_t(_release),
-            Begin=Begin_t(_begin), Update=Dword_t(_update), End=Dword_t(_end),
+        # ── CRITICAL: wrap callbacks BEFORE putting into struct ───────────
+        # ctypes does NOT keep a Python reference to WINFUNCTYPE objects
+        # stored in struct fields — only the raw C pointer is stored.
+        # We must hold explicit Python references or the thunks are freed.
+        cb_qi     = QI_t(_qi)
+        cb_addref = Ref_t(_addref)
+        cb_release= Ref_t(_release)
+        cb_begin  = Begin_t(_begin)
+        cb_update = Dword_t(_update)
+        cb_end    = Dword_t(_end)
+
+        vtbl = Vtbl(
+            QI=cb_qi, AddRef=cb_addref, Release=cb_release,
+            Begin=cb_begin, Update=cb_update, End=cb_end,
         )
-        obj = _Obj()
+        obj = SinkObj()
         obj.lpVtbl = ctypes.pointer(vtbl)
 
-        # ── CoInitialize ─────────────────────────────────────────────────
+        # ── CoInitialize ──────────────────────────────────────────────────
         ole32.CoInitialize.restype  = HRESULT
         ole32.CoInitialize.argtypes = [ctypes.c_void_p]
         hr = ole32.CoInitialize(None)
-        if hr not in (0, 1):   # S_OK or S_FALSE (already init)
+        if hr not in (S_OK, 1):   # S_OK or S_FALSE (already initialised)
             return
 
         # ── CoCreateInstance(CLSID_TF_ThreadMgr) ─────────────────────────
@@ -285,43 +282,47 @@ def _install_tsf_sink() -> None:
         if hr or not pTM.value:
             return
 
-        # ── QI pTM → ITfUIElementMgr ──────────────────────────────────────
-        # vtable[0] = IUnknown::QueryInterface
-        def _vtbl_fn(ptr, idx, proto):
+        # ── Helper: call vtable method N on a COM pointer ─────────────────
+        def _call(ptr, idx, proto, *args):
             vt = ctypes.cast(
                 ctypes.cast(ptr, ctypes.POINTER(ctypes.c_void_p)).contents,
                 ctypes.POINTER(ctypes.c_void_p),
             )
-            return proto(vt[idx])
+            return proto(vt[idx])(ptr, *args)
 
         GenQI = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p,
                                    ctypes.POINTER(GUID),
                                    ctypes.POINTER(ctypes.c_void_p))
+
+        # ── QI pTM → ITfUIElementMgr ──────────────────────────────────────
         pUEM = ctypes.c_void_p()
-        hr   = _vtbl_fn(pTM, 0, GenQI)(pTM, ctypes.byref(IID_ITfUIElemMgr), ctypes.byref(pUEM))
+        hr   = _call(pTM, 0, GenQI,
+                     ctypes.byref(IID_ITfUIElemMgr), ctypes.byref(pUEM))
         if hr or not pUEM.value:
             return
 
-        # ── ITfUIElementMgr::AdviseUIElementSink (vtable index 5) ─────────
+        # ── AdviseUIElementSink (ITfUIElementMgr vtable[5]) ──────────────
         # [0]QI [1]AddRef [2]Release [3]GetUIElement [4]EnumUIElements
         # [5]AdviseUIElementSink [6]UnadviseUIElementSink
         AdviseT = ctypes.WINFUNCTYPE(HRESULT, ctypes.c_void_p,
                                      ctypes.c_void_p,
                                      ctypes.POINTER(wt.DWORD))
-        advise  = _vtbl_fn(pUEM, 5, AdviseT)
         cookie  = wt.DWORD(0)
         obj_ptr = ctypes.cast(ctypes.byref(obj), ctypes.c_void_p).value
-        hr      = advise(pUEM, obj_ptr, ctypes.byref(cookie))
+        hr      = _call(pUEM, 5, AdviseT, obj_ptr, ctypes.byref(cookie))
 
         if hr == 0:
-            # Keep everything alive
-            _tsf_refs = (obj, vtbl, pTM, pUEM, cookie,
-                         _qi, _addref, _release, _begin, _update, _end)
+            # Keep EVERYTHING alive — any of these being freed = crash / silent failure
+            _tsf_anchors = (
+                obj, vtbl, pTM, pUEM, cookie,
+                cb_qi, cb_addref, cb_release, cb_begin, cb_update, cb_end,
+                _qi, _addref, _release, _begin, _update, _end,
+            )
 
     except Exception:
-        pass   # fail silently; WH_CALLWNDPROC fallback still active
+        pass   # fail silently; WH_CALLWNDPROC still active as fallback
 
 
-# Back-compat shim
 def suppress_ime_popup(widget) -> None:   # noqa: ARG001
+    """Back-compat shim — no longer needed."""
     pass
