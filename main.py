@@ -6,8 +6,7 @@ import os
 # Ensure the app directory is on the path when bundled or double-clicked
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import tkinter as tk
-
+import customtkinter as ctk
 import subprocess
 import database
 from main_window import MainWindow
@@ -15,7 +14,6 @@ from ime_utils import fix_entry_ime_font
 
 
 def _git_hash() -> str:
-    # Try git first (works in a cloned repo)
     try:
         return subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -24,7 +22,6 @@ def _git_hash() -> str:
         ).decode().strip()
     except Exception:
         pass
-    # Fall back to version.txt (present in downloaded zips)
     try:
         vfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt")
         with open(vfile, encoding="utf-8") as f:
@@ -39,12 +36,14 @@ def main() -> None:
 
     database.init_db()
 
-    root = tk.Tk()
+    ctk.set_appearance_mode("light")
+    ctk.set_default_color_theme("blue")
+
+    root = ctk.CTk()
     root.title(f"遊戯王マスターデュエル 戦績管理  [commit:{git_hash}]")
     root.geometry("1200x760")
     root.minsize(960, 620)
 
-    # App icon (optional – skip if file is absent)
     icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
     if os.path.isfile(icon_path):
         try:
@@ -52,9 +51,7 @@ def main() -> None:
         except Exception:
             pass
 
-    # Sync the IME composition font with the widget font for every TEntry.
-    # Without this, Windows IME renders pre-confirmation text in a different
-    # font than confirmed text.
+    # CTkEntry internally uses ttk.Entry (class tag "TEntry"), so this still fires.
     root.bind_class("TEntry", "<FocusIn>",
                     lambda e: fix_entry_ime_font(e.widget.winfo_id()), add="+")
 
