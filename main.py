@@ -11,7 +11,7 @@ import tkinter as tk
 import subprocess
 import database
 from main_window import MainWindow
-from ime_utils import install_ime_hook, get_status, touch_fg_tick, fix_entry_ime_font, _LOG_PATH
+from ime_utils import fix_entry_ime_font
 
 
 def _git_hash() -> str:
@@ -36,17 +36,11 @@ def _git_hash() -> str:
 def main() -> None:
     git_hash = _git_hash()
     print(f"=== 遊戯王戦績管理  commit={git_hash} ===")
-    print(f"    IMEログ: {_LOG_PATH}")
 
     database.init_db()
 
     root = tk.Tk()
-    install_ime_hook()
-
-    ime_status = get_status()
-    base_title  = "遊戯王マスターデュエル 戦績管理"
-    root.title(f"{base_title}  [commit:{git_hash}]{ime_status}")
-    print(f"    {ime_status}")
+    root.title(f"遊戯王マスターデュエル 戦績管理  [commit:{git_hash}]")
     root.geometry("1200x760")
     root.minsize(960, 620)
 
@@ -58,27 +52,13 @@ def main() -> None:
         except Exception:
             pass
 
-    # Bind <FocusIn> on the root window so touch_fg_tick() is called whenever
-    # our app gains focus.  EVENT_SYSTEM_FOREGROUND does not reliably fire for
-    # tkinter windows, so this is the primary way _fg_tick stays current.
-    root.bind("<FocusIn>", lambda e: touch_fg_tick(), add="+")
-
     # Sync the IME composition font with the widget font for every TEntry.
-    # Without this, Windows IME renders pre-confirmation text in the system
-    # default font instead of the app font (Yu Gothic UI), causing a visible
-    # mismatch between confirmed and unconfirmed text.
+    # Without this, Windows IME renders pre-confirmation text in a different
+    # font than confirmed text.
     root.bind_class("TEntry", "<FocusIn>",
                     lambda e: fix_entry_ime_font(e.widget.winfo_id()), add="+")
 
     MainWindow(root)
-
-    # Refresh the title bar every 2 s so the IME diagnostic counters stay live.
-    def _refresh_title() -> None:
-        ime_status = get_status()
-        root.title(f"{base_title}  [commit:{git_hash}]{ime_status}")
-        root.after(2000, _refresh_title)
-
-    root.after(2000, _refresh_title)
     root.mainloop()
 
 
