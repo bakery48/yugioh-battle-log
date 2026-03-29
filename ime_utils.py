@@ -46,6 +46,36 @@ _begin_count      = [0]   # incremented every time BeginUIElement fires
 _suppress_count   = [0]   # incremented every time we set pbShow=FALSE
 _ev_hide_count    = [0]   # incremented every time WinEvent hides a popup
 
+# ── C++ DLL helper ────────────────────────────────────────────────────────────
+_dll_helper = None          # ctypes.WinDLL instance if loaded
+_dll_active = False         # True if ime_helper_init() returned TRUE
+
+
+def _try_load_dll() -> None:
+    """ime_helper.dll をロードし、TSF sink を C++ 側で登録する。"""
+    global _dll_helper, _dll_active
+    if sys.platform != "win32":
+        return
+    import ctypes
+    # このファイルと同じディレクトリにある ime_helper.dll を探す
+    dll_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "ime_helper.dll")
+    if not os.path.exists(dll_path):
+        _log(f"DLL not found: {dll_path}")
+        return
+    try:
+        dll = ctypes.WinDLL(dll_path)
+        dll.ime_helper_init.restype         = ctypes.c_bool
+        dll.ime_helper_is_active.restype    = ctypes.c_bool
+        dll.ime_helper_suppress_count.restype = ctypes.c_uint32
+        dll.ime_helper_allow_count.restype    = ctypes.c_uint32
+        ok = dll.ime_helper_init()
+        _log(f"DLL loaded: {dll_path}  init={ok}")
+        _dll_helper = dll
+        _dll_active = bool(ok)
+    except Exception as e:
+        _log(f"DLL load failed: {e}")
+
 
 def install_ime_hook() -> None:
     """Call once after tk.Tk() is created."""
@@ -54,10 +84,12 @@ def install_ime_hook() -> None:
     if sys.platform != "win32":
         _log("Not Windows — skipping")
         return
+    _try_load_dll()          # C++ DLL を最優先で試みる
     _install_wh_hook()
     _install_getmsg_hook()
-    _install_tsf_sink()
+    _install_tsf_sink()      # Python ctypes TSF (DLL成功時も念のため残す)
     _install_popup_watcher()
+    _log(f"DLL active     : {_dll_active}")
     _log(f"WH hook handle : {_hook_handle}")
     _log(f"TSF anchors set: {_tsf_anchors is not None}")
     _log(f"WinEvent handle: {_winevent_handle}")
@@ -73,6 +105,12 @@ def install_ime_hook() -> None:
 def get_status() -> str:
     """Return a one-line status string (shown in the title bar, refreshed periodically)."""
     parts = []
+    if _dll_active:
+        sc = _dll_helper.ime_helper_suppress_count() if _dll_helper else 0
+        ac = _dll_helper.ime_helper_allow_count()    if _dll_helper else 0
+        parts.append(f"DLL:OK({sc}s/{ac}a)")
+    else:
+        parts.append("DLL:NG")
     parts.append("WH:" + ("OK" if _hook_handle else "NG"))
     parts.append("GM:" + ("OK" if _getmsg_handle else "NG"))
     parts.append("TSF:" + ("OK" if _tsf_anchors is not None else "NG"))
