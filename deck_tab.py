@@ -101,8 +101,8 @@ class DeckTab:
         for iid in self.decks_tree.get_children():
             self.decks_tree.delete(iid)
         for deck in self._decks:
-            tag_names = "  ".join(t['name'] for t in deck["tags"])
-            weak_names = "  ".join(t['name'] for t in deck.get("weakness_tags", []))
+            tag_names = ", ".join(t['name'] for t in deck["tags"])
+            weak_names = ", ".join(t['name'] for t in deck.get("weakness_tags", []))
             self.decks_tree.insert(
                 "", tk.END, iid=str(deck["id"]),
                 values=(deck["name"], tag_names, weak_names)
