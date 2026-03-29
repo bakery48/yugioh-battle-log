@@ -58,14 +58,16 @@ class DeckTab:
         tree_frame = ttk.Frame(decks_outer)
         tree_frame.pack(fill=tk.BOTH, expand=True)
 
-        columns = ("name", "tags")
+        columns = ("name", "tags", "weakness")
         self.decks_tree = ttk.Treeview(
             tree_frame, columns=columns, show="headings", selectmode="browse"
         )
         self.decks_tree.heading("name", text="デッキ名")
         self.decks_tree.heading("tags", text="タグ")
-        self.decks_tree.column("name", width=200)
-        self.decks_tree.column("tags", width=350, stretch=True)
+        self.decks_tree.heading("weakness", text="弱点タグ")
+        self.decks_tree.column("name", width=180)
+        self.decks_tree.column("tags", width=220)
+        self.decks_tree.column("weakness", width=220, stretch=True)
 
         dsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.decks_tree.yview)
         self.decks_tree.configure(yscrollcommand=dsb.set)
@@ -100,8 +102,10 @@ class DeckTab:
             self.decks_tree.delete(iid)
         for deck in self._decks:
             tag_names = "  ".join(f"[{t['name']}]" for t in deck["tags"])
+            weak_names = "  ".join(f"[{t['name']}]" for t in deck.get("weakness_tags", []))
             self.decks_tree.insert(
-                "", tk.END, iid=str(deck["id"]), values=(deck["name"], tag_names)
+                "", tk.END, iid=str(deck["id"]),
+                values=(deck["name"], tag_names, weak_names)
             )
 
     # ── Tag CRUD ──────────────────────────────────────────────────────────────
@@ -154,11 +158,13 @@ class DeckTab:
     # ── Deck CRUD ─────────────────────────────────────────────────────────────
 
     def add_deck(self) -> None:
-        dlg = DeckDialog(self.frame, tags=db.get_all_tags())
+        dlg = DeckDialog(self.frame, tags=db.get_all_tags(),
+                         weakness_tags=db.get_all_weakness_tags())
         self.frame.wait_window(dlg.top)
         if dlg.result:
             try:
-                db.add_deck(dlg.result["name"], dlg.result["tag_ids"])
+                db.add_deck(dlg.result["name"], dlg.result["tag_ids"],
+                            dlg.result["weakness_tag_names"])
                 self.load_decks()
                 if self.on_deck_changed:
                     self.on_deck_changed()
@@ -176,11 +182,13 @@ class DeckTab:
         deck = next((d for d in self._decks if d["id"] == deck_id), None)
         if not deck:
             return
-        dlg = DeckDialog(self.frame, tags=db.get_all_tags(), deck=deck)
+        dlg = DeckDialog(self.frame, tags=db.get_all_tags(),
+                         weakness_tags=db.get_all_weakness_tags(), deck=deck)
         self.frame.wait_window(dlg.top)
         if dlg.result:
             try:
-                db.update_deck(deck_id, dlg.result["name"], dlg.result["tag_ids"])
+                db.update_deck(deck_id, dlg.result["name"], dlg.result["tag_ids"],
+                               dlg.result["weakness_tag_names"])
                 self.load_decks()
                 if self.on_deck_changed:
                     self.on_deck_changed()

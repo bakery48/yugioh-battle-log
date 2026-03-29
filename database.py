@@ -34,6 +34,17 @@ def init_db() -> None:
                 PRIMARY KEY (deck_id, tag_id)
             );
 
+            CREATE TABLE IF NOT EXISTS weakness_tags (
+                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT    UNIQUE NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS deck_weakness_tags (
+                deck_id         INTEGER NOT NULL REFERENCES decks(id)         ON DELETE CASCADE,
+                weakness_tag_id INTEGER NOT NULL REFERENCES weakness_tags(id) ON DELETE CASCADE,
+                PRIMARY KEY (deck_id, weakness_tag_id)
+            );
+
             CREATE TABLE IF NOT EXISTS battles (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 date          TEXT    NOT NULL,
@@ -105,13 +116,44 @@ def get_all_decks() -> list:
                 (deck["id"],),
             ).fetchall()
             deck["tags"] = [dict(t) for t in tags]
+            weakness_tags = conn.execute(
+                """SELECT wt.id, wt.name FROM weakness_tags wt
+                   JOIN deck_weakness_tags dwt ON wt.id = dwt.weakness_tag_id
+                   WHERE dwt.deck_id = ?
+                   ORDER BY wt.name""",
+                (deck["id"],),
+            ).fetchall()
+            deck["weakness_tags"] = [dict(t) for t in weakness_tags]
             result.append(deck)
         return result
     finally:
         conn.close()
 
 
-def add_deck(name: str, tag_ids: Optional[list] = None) -> int:
+def _sync_weakness_tags(conn: sqlite3.Connection, deck_id: int, weakness_tag_names: list) -> None:
+    """Upsert weakness tags and link them to the deck."""
+    conn.execute("DELETE FROM deck_weakness_tags WHERE deck_id = ?", (deck_id,))
+    for name in weakness_tag_names:
+        conn.execute("INSERT OR IGNORE INTO weakness_tags (name) VALUES (?)", (name,))
+        wt_id = conn.execute(
+            "SELECT id FROM weakness_tags WHERE name = ?", (name,)
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT OR IGNORE INTO deck_weakness_tags (deck_id, weakness_tag_id) VALUES (?, ?)",
+            (deck_id, wt_id),
+        )
+
+
+def get_all_weakness_tags() -> list:
+    conn = _get_conn()
+    try:
+        return [dict(r) for r in conn.execute("SELECT * FROM weakness_tags ORDER BY name")]
+    finally:
+        conn.close()
+
+
+def add_deck(name: str, tag_ids: Optional[list] = None,
+             weakness_tag_names: Optional[list] = None) -> int:
     conn = _get_conn()
     try:
         cur = conn.execute("INSERT INTO decks (name) VALUES (?)", (name,))
@@ -121,13 +163,16 @@ def add_deck(name: str, tag_ids: Optional[list] = None) -> int:
                 "INSERT INTO deck_tags (deck_id, tag_id) VALUES (?, ?)",
                 [(deck_id, tid) for tid in tag_ids],
             )
+        if weakness_tag_names:
+            _sync_weakness_tags(conn, deck_id, weakness_tag_names)
         conn.commit()
         return deck_id
     finally:
         conn.close()
 
 
-def update_deck(deck_id: int, name: str, tag_ids: Optional[list] = None) -> None:
+def update_deck(deck_id: int, name: str, tag_ids: Optional[list] = None,
+                weakness_tag_names: Optional[list] = None) -> None:
     conn = _get_conn()
     try:
         conn.execute("UPDATE decks SET name = ? WHERE id = ?", (name, deck_id))
@@ -137,6 +182,7 @@ def update_deck(deck_id: int, name: str, tag_ids: Optional[list] = None) -> None
                 "INSERT INTO deck_tags (deck_id, tag_id) VALUES (?, ?)",
                 [(deck_id, tid) for tid in tag_ids],
             )
+        _sync_weakness_tags(conn, deck_id, weakness_tag_names or [])
         conn.commit()
     finally:
         conn.close()
