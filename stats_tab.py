@@ -195,7 +195,7 @@ class StatsTab:
         ttk.Label(
             summary,
             text=f"総試合数  {total} 試合　　{wins} 勝 {losses} 敗　　総合勝率 {_pct(wins, total)}",
-            font=("Yu Gothic UI", 13, "bold"),
+            font=("Meiryo", 13, "bold"),
         ).pack()
 
         ttk.Separator(self.result_frame, orient=tk.HORIZONTAL).pack(
@@ -208,7 +208,7 @@ class StatsTab:
 
         headers = ["区分", "試合数", "勝利", "敗北", "勝率", "比率（先後攻率）"]
         col_widths = [7, 7, 7, 7, 9, 16]
-        bold = ("Yu Gothic UI", 10, "bold")
+        bold = ("Meiryo", 10, "bold")
 
         for c, (h, w) in enumerate(zip(headers, col_widths)):
             ttk.Label(

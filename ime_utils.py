@@ -9,7 +9,7 @@ import sys
 
 
 def fix_entry_ime_font(hwnd_id: int,
-                       font_name: str = "Yu Gothic UI",
+                       font_name: str = "Meiryo",
                        point_size: int = 10) -> None:
     """
     Call ImmSetCompositionFontW so the IME composition (pre-confirmation)

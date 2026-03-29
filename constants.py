@@ -4,7 +4,7 @@ FIRST_SECOND_OPTIONS = ["先攻", "後攻"]
 RESULT_OPTIONS = ["勝利", "敗北"]
 
 # Japanese-compatible fonts for tkinter (Windows)
-FONT_FAMILY = "Yu Gothic UI"
+FONT_FAMILY = "Meiryo"
 FONT_SIZE = 10
 
 # Japanese-compatible fonts for matplotlib (Windows)

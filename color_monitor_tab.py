@@ -79,8 +79,6 @@ def _resolve_region(rel_region, hwnd):
 # ─── RegionSelector ───────────────────────────────────────────────────────────
 
 class _RegionSelector:
-    """全画面ドラッグで領域を選択し、スクリーン絶対座標で callback を呼ぶ。"""
-
     def __init__(self, root, callback):
         self.callback = callback
         self.start_x = self.start_y = 0
@@ -161,10 +159,12 @@ class _AlertWindow:
         self.canvas.pack(fill="both", expand=True)
         self.canvas.create_text(w // 2, int(h * 0.38),
                                 text="⚠  色が変わりました！", fill="white",
-                                font=("Meiryo", max(30, w // 14), "bold"), anchor="center")
+                                font=("Meiryo", max(30, w // 14), "bold"),
+                                anchor="center")
         self.canvas.create_text(w // 2, int(h * 0.65),
                                 text="クリックして閉じる", fill="#ffdddd",
-                                font=("Meiryo", max(14, w // 32)), anchor="center")
+                                font=("Meiryo", max(14, w // 32)),
+                                anchor="center")
         self.win.bind("<Button-1>", lambda e: self._close())
         self.win.bind("<Escape>",   lambda e: self._close())
 
@@ -208,17 +208,16 @@ class _MonitorThread(threading.Thread):
         self._stop_event.set()
 
     def _tick(self):
-        rel_region = self.config["region"]
-        hwnd       = self.config["hwnd"]
-        start_color = self.config["start_color"]
-        end_color   = self.config["end_color"]
-        threshold   = self.config["threshold"]
-        wait_sec    = self.config["wait_sec"]
+        rel_region   = self.config["region"]
+        hwnd         = self.config["hwnd"]
+        start_color  = self.config["start_color"]
+        end_color    = self.config["end_color"]
+        threshold    = self.config["threshold"]
+        wait_sec     = self.config["wait_sec"]
 
         if not rel_region or not start_color or not end_color:
             return
 
-        # ウィンドウ相対座標をその都度絶対座標に変換 → ウィンドウ移動に追従
         region = _resolve_region(rel_region, hwnd)
         if region is None:
             return
@@ -253,14 +252,13 @@ class _MonitorThread(threading.Thread):
 
 class ColorMonitorTab:
     def __init__(self, parent: tk.Widget):
-        self.frame = tk.Frame(parent, bg="#1e1e2e")
+        self.frame = ttk.Frame(parent)
 
         if not _DEPS_OK:
-            tk.Label(self.frame,
-                     text="Pillow と pywin32 が必要です。\npip install Pillow pywin32",
-                     bg="#1e1e2e", fg="#ff8888",
-                     font=("Meiryo", 12), justify="center"
-                     ).pack(expand=True)
+            ttk.Label(self.frame,
+                      text="Pillow と pywin32 が必要です。\npip install Pillow pywin32",
+                      foreground="red", justify="center"
+                      ).pack(expand=True, pady=40)
             return
 
         self.region = None
@@ -276,142 +274,102 @@ class ColorMonitorTab:
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        # タイトル
-        title_frame = tk.Frame(self.frame, bg="#12122a", pady=8)
-        title_frame.pack(fill="x")
-        tk.Label(title_frame, text="🎨  色変化監視",
-                 fg="#a0d0ff", bg="#12122a",
-                 font=("Meiryo", 14, "bold")).pack()
+        pad = {"padx": 10, "pady": 4}
 
-        main = tk.Frame(self.frame, bg="#1e1e2e", padx=16, pady=10)
-        main.pack(fill="both", expand=True)
+        main = ttk.Frame(self.frame, padding=10)
+        main.pack(fill=tk.BOTH, expand=True)
 
-        # セクション1: ウィンドウ選択
-        self._section(main, "🖥  監視対象ウィンドウ")
-        wf = tk.Frame(main, bg="#1e1e2e")
-        wf.pack(fill="x", pady=(0, 8))
-        self.win_combo = ttk.Combobox(wf, state="readonly", width=40,
-                                      font=("Meiryo", 9))
-        self.win_combo.pack(side="left", padx=(0, 6))
+        # ── ウィンドウ選択 ────────────────────────────────────────────────────
+        wf = ttk.LabelFrame(main, text="監視対象ウィンドウ", padding=6)
+        wf.pack(fill=tk.X, pady=(0, 6))
+        row = ttk.Frame(wf)
+        row.pack(fill=tk.X)
+        self.win_combo = ttk.Combobox(row, state="readonly", width=46)
+        self.win_combo.pack(side=tk.LEFT, padx=(0, 6))
         self.win_combo.bind("<<ComboboxSelected>>", self._on_window_select)
-        tk.Button(wf, text="🔄 更新", command=self._refresh_windows,
-                  bg="#3a3a5c", fg="white", font=("Meiryo", 9),
-                  relief="flat", padx=8, cursor="hand2").pack(side="left")
+        ttk.Button(row, text="🔄 更新", command=self._refresh_windows,
+                   width=8).pack(side=tk.LEFT)
         self._refresh_windows()
 
-        # セクション2: 監視領域（ウィンドウ相対座標）
-        self._section(main, "📐  監視領域  ※ウィンドウ内の相対座標で記録")
-        rf = tk.Frame(main, bg="#1e1e2e")
-        rf.pack(fill="x", pady=(0, 8))
-        self.region_label = tk.Label(rf, text="未設定", fg="#888",
-                                     bg="#2a2a3e", font=("Meiryo", 9),
-                                     width=30, relief="sunken", padx=4)
-        self.region_label.pack(side="left", padx=(0, 6))
-        tk.Button(rf, text="🖱 ドラッグで選択", command=self._pick_region,
-                  bg="#3a3a5c", fg="white", font=("Meiryo", 9),
-                  relief="flat", padx=8, cursor="hand2").pack(side="left")
+        # ── 監視領域 ──────────────────────────────────────────────────────────
+        rf = ttk.LabelFrame(main, text="監視領域  ※ウィンドウ内の相対座標", padding=6)
+        rf.pack(fill=tk.X, pady=(0, 6))
+        row2 = ttk.Frame(rf)
+        row2.pack(fill=tk.X)
+        self.region_label = ttk.Label(row2, text="未設定", foreground="gray", width=34)
+        self.region_label.pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(row2, text="🖱 ドラッグで選択", command=self._pick_region,
+                   width=14).pack(side=tk.LEFT)
 
-        # セクション3: 色設定
-        self._section(main, "🎨  色設定")
-        cf = tk.Frame(main, bg="#1e1e2e")
-        cf.pack(fill="x", pady=(0, 8))
+        # ── 色設定 ────────────────────────────────────────────────────────────
+        cf = ttk.LabelFrame(main, text="色設定", padding=6)
+        cf.pack(fill=tk.X, pady=(0, 6))
 
-        for which, label in (("start", "開始色 (変化前)"), ("end", "終了色 (変化後)")):
-            sf = tk.Frame(cf, bg="#1e1e2e")
-            sf.pack(side="left", padx=(0, 24))
-            tk.Label(sf, text=label, fg="#aaa", bg="#1e1e2e",
-                     font=("Meiryo", 9)).pack(anchor="w")
-            row = tk.Frame(sf, bg="#1e1e2e")
-            row.pack()
-            canvas = tk.Canvas(row, width=36, height=28, bg="#555",
-                               relief="sunken", bd=1)
-            canvas.pack(side="left", padx=(0, 4))
-            lbl = tk.Label(row, text="未設定", fg="#888", bg="#1e1e2e",
-                           font=("Meiryo", 9), width=9)
-            lbl.pack(side="left")
+        for col, (which, label) in enumerate((("start", "開始色（変化前）"),
+                                               ("end",   "終了色（変化後）"))):
+            sf = ttk.LabelFrame(cf, text=label, padding=6)
+            sf.grid(row=0, column=col, padx=(0, 16), sticky=tk.W)
+            top_row = ttk.Frame(sf)
+            top_row.pack(anchor=tk.W)
+            canvas = tk.Canvas(top_row, width=36, height=24, relief="sunken", bd=1)
+            canvas.pack(side=tk.LEFT, padx=(0, 6))
+            lbl = ttk.Label(top_row, text="未設定", width=10)
+            lbl.pack(side=tk.LEFT)
             if which == "start":
                 self.start_canvas, self.start_label = canvas, lbl
             else:
                 self.end_canvas, self.end_label = canvas, lbl
-            tk.Button(sf, text="スクリーンから取得",
-                      command=lambda w=which: self._pick_color(w),
-                      bg="#3a3a5c", fg="white", font=("Meiryo", 9),
-                      relief="flat", padx=6, cursor="hand2").pack(pady=(2, 0))
-            tk.Button(sf, text="カラーダイアログ",
-                      command=lambda w=which: self._pick_color_dialog(w),
-                      bg="#2a2a3e", fg="#aaa", font=("Meiryo", 9),
-                      relief="flat", padx=6, cursor="hand2").pack(pady=(2, 0))
+            btn_row = ttk.Frame(sf)
+            btn_row.pack(anchor=tk.W, pady=(4, 0))
+            ttk.Button(btn_row, text="スクリーンから取得",
+                       command=lambda w=which: self._pick_color(w),
+                       width=16).pack(side=tk.LEFT, padx=(0, 4))
+            ttk.Button(btn_row, text="ダイアログ",
+                       command=lambda w=which: self._pick_color_dialog(w),
+                       width=10).pack(side=tk.LEFT)
 
-        # セクション4: パラメータ
-        self._section(main, "⚙  監視パラメータ")
-        pf = tk.Frame(main, bg="#1e1e2e")
-        pf.pack(fill="x", pady=(0, 8))
+        # ── パラメータ ────────────────────────────────────────────────────────
+        pf = ttk.LabelFrame(main, text="監視パラメータ", padding=6)
+        pf.pack(fill=tk.X, pady=(0, 6))
 
-        tf = tk.Frame(pf, bg="#1e1e2e")
-        tf.pack(side="left", padx=(0, 24))
-        tk.Label(tf, text="色一致の閾値 (%)", fg="#aaa", bg="#1e1e2e",
-                 font=("Meiryo", 9)).pack(anchor="w")
-        tr = tk.Frame(tf, bg="#1e1e2e")
-        tr.pack()
+        ttk.Label(pf, text="色一致の閾値 (%):").grid(row=0, column=0, sticky=tk.W, padx=(0, 6))
         self.threshold_var = tk.DoubleVar(value=10.0)
-        ttk.Scale(tr, from_=1, to=50, variable=self.threshold_var,
-                  orient="horizontal", length=160,
-                  command=self._on_threshold_change).pack(side="left")
-        self.threshold_disp = tk.Label(tr, text="10.0%", fg="white",
-                                       bg="#1e1e2e", font=("Meiryo", 9), width=6)
-        self.threshold_disp.pack(side="left", padx=(4, 0))
+        ttk.Scale(pf, from_=1, to=50, variable=self.threshold_var,
+                  orient="horizontal", length=180,
+                  command=self._on_threshold_change).grid(row=0, column=1)
+        self.threshold_disp = ttk.Label(pf, text="10.0%", width=6)
+        self.threshold_disp.grid(row=0, column=2, padx=(6, 24))
 
-        df = tk.Frame(pf, bg="#1e1e2e")
-        df.pack(side="left")
-        tk.Label(df, text="検知後の待機時間 (秒)", fg="#aaa", bg="#1e1e2e",
-                 font=("Meiryo", 9)).pack(anchor="w")
+        ttk.Label(pf, text="検知後の待機時間 (秒):").grid(row=0, column=3, sticky=tk.W, padx=(0, 6))
         self.wait_var = tk.StringVar(value="3")
-        tk.Spinbox(df, from_=0, to=3600, textvariable=self.wait_var,
-                   width=6, font=("Meiryo", 10),
-                   bg="#2a2a3e", fg="white", insertbackground="white",
-                   buttonbackground="#3a3a5c").pack(anchor="w")
+        ttk.Spinbox(pf, from_=0, to=3600, textvariable=self.wait_var,
+                    width=6).grid(row=0, column=4)
 
-        # セクション5: 状態
-        self._section(main, "📊  状態")
-        sf2 = tk.Frame(main, bg="#1e1e2e")
-        sf2.pack(fill="x", pady=(0, 8))
-        self.status_label = tk.Label(sf2, text="●  停止中", fg="#888",
-                                     bg="#2a2a3e", font=("Meiryo", 11, "bold"),
-                                     relief="sunken", padx=10, pady=4)
-        self.status_label.pack(side="left", padx=(0, 10))
-        self.color_preview = tk.Label(sf2, text="現在色: ─",
-                                      fg="#aaa", bg="#1e1e2e", font=("Meiryo", 9))
-        self.color_preview.pack(side="left")
-        self.cur_color_canvas = tk.Canvas(sf2, width=28, height=20,
-                                          bg="#555", relief="sunken", bd=1)
-        self.cur_color_canvas.pack(side="left", padx=(4, 0))
+        # ── 状態 ──────────────────────────────────────────────────────────────
+        sf2 = ttk.LabelFrame(main, text="状態", padding=6)
+        sf2.pack(fill=tk.X, pady=(0, 6))
+        row3 = ttk.Frame(sf2)
+        row3.pack(fill=tk.X)
+        self.status_label = ttk.Label(row3, text="● 停止中", foreground="gray", width=12)
+        self.status_label.pack(side=tk.LEFT, padx=(0, 16))
+        self.color_preview = ttk.Label(row3, text="現在色: ─")
+        self.color_preview.pack(side=tk.LEFT)
+        self.cur_color_canvas = tk.Canvas(row3, width=28, height=20,
+                                          relief="sunken", bd=1)
+        self.cur_color_canvas.pack(side=tk.LEFT, padx=(6, 0))
 
-        # 操作ボタン
-        bf = tk.Frame(self.frame, bg="#12122a", pady=8)
-        bf.pack(fill="x")
-        self.start_btn = tk.Button(bf, text="▶  監視開始",
-                                   command=self._start_monitor,
-                                   bg="#007acc", fg="white",
-                                   font=("Meiryo", 11, "bold"),
-                                   relief="flat", padx=20, pady=6, cursor="hand2")
-        self.start_btn.pack(side="left", padx=(16, 8))
-        self.stop_btn = tk.Button(bf, text="■  停止",
-                                  command=self._stop_monitor,
-                                  bg="#555", fg="#aaa",
-                                  font=("Meiryo", 11, "bold"),
-                                  relief="flat", padx=20, pady=6,
-                                  cursor="hand2", state="disabled")
-        self.stop_btn.pack(side="left")
+        # ── 操作ボタン ────────────────────────────────────────────────────────
+        bf = ttk.Frame(main)
+        bf.pack(fill=tk.X, pady=(4, 0))
+        self.start_btn = ttk.Button(bf, text="▶ 監視開始",
+                                    command=self._start_monitor, width=12)
+        self.start_btn.pack(side=tk.LEFT, padx=(0, 8))
+        self.stop_btn = ttk.Button(bf, text="■ 停止",
+                                   command=self._stop_monitor, width=8,
+                                   state="disabled")
+        self.stop_btn.pack(side=tk.LEFT)
 
         self._update_color_preview()
-
-    def _section(self, parent, title):
-        f = tk.Frame(parent, bg="#1e1e2e")
-        f.pack(fill="x", pady=(8, 2))
-        tk.Label(f, text=title, fg="#a0d0ff", bg="#1e1e2e",
-                 font=("Meiryo", 10, "bold")).pack(side="left")
-        tk.Frame(f, bg="#3a3a5c", height=1).pack(
-            side="left", fill="x", expand=True, padx=(6, 0))
 
     # ── ウィンドウ選択 ────────────────────────────────────────────────────────
 
@@ -434,7 +392,7 @@ class ColorMonitorTab:
         if 0 <= idx < len(self._windows_list):
             self.selected_hwnd, _ = self._windows_list[idx]
 
-    # ── 領域選択（ウィンドウ相対座標で保存） ─────────────────────────────────
+    # ── 領域選択 ──────────────────────────────────────────────────────────────
 
     def _pick_region(self):
         toplevel = self.frame.winfo_toplevel()
@@ -442,7 +400,6 @@ class ColorMonitorTab:
         self.frame.after(300, lambda: _RegionSelector(toplevel, self._on_region_selected))
 
     def _on_region_selected(self, abs_region):
-        """スクリーン絶対座標 → ウィンドウ相対座標に変換して保存"""
         self.frame.winfo_toplevel().deiconify()
         ax1, ay1, ax2, ay2 = abs_region
         w, h = ax2 - ax1, ay2 - ay1
@@ -452,14 +409,15 @@ class ColorMonitorTab:
                 rx1, ry1 = ax1 - wx, ay1 - wy
                 self.region = (rx1, ry1, rx1 + w, ry1 + h)
                 self.region_label.config(
-                    text=f"相対座標 ({rx1}, {ry1})  サイズ {w}×{h}", fg="white")
+                    text=f"相対座標 ({rx1}, {ry1})  サイズ {w}×{h}",
+                    foreground="")
                 return
             except Exception:
                 pass
-        # hwnd 取得失敗時は絶対座標で保存（黄色で警告）
         self.region = abs_region
         self.region_label.config(
-            text=f"絶対座標 ({ax1},{ay1})→({ax2},{ay2})", fg="#ffaa44")
+            text=f"絶対座標 ({ax1},{ay1})→({ax2},{ay2})",
+            foreground="orange")
 
     # ── 色選択 ────────────────────────────────────────────────────────────────
 
@@ -474,7 +432,8 @@ class ColorMonitorTab:
         self._set_color(which, color)
 
     def _pick_color_dialog(self, which):
-        initial = _rgb_to_hex(self.start_color if which == "start" else self.end_color or (0, 0, 0))
+        cur = self.start_color if which == "start" else self.end_color
+        initial = _rgb_to_hex(cur) if cur else None
         result = colorchooser.askcolor(color=initial, title="色を選択")
         if result and result[0]:
             self._set_color(which, tuple(int(v) for v in result[0]))
@@ -484,11 +443,11 @@ class ColorMonitorTab:
         if which == "start":
             self.start_color = color
             self.start_canvas.configure(bg=hex_c)
-            self.start_label.configure(text=hex_c, fg="white")
+            self.start_label.configure(text=hex_c)
         else:
             self.end_color = color
             self.end_canvas.configure(bg=hex_c)
-            self.end_label.configure(text=hex_c, fg="white")
+            self.end_label.configure(text=hex_c)
 
     def _on_threshold_change(self, _):
         self.threshold_disp.config(text=f"{round(self.threshold_var.get(), 1)}%")
@@ -520,16 +479,16 @@ class ColorMonitorTab:
             lambda: self.frame.after(0, self._show_alert)
         )
         self._monitor_thread.start()
-        self.status_label.config(text="●  監視中", fg="#00ff88")
-        self.start_btn.config(state="disabled", bg="#555")
-        self.stop_btn.config(state="normal", bg="#cc4444", fg="white")
+        self.status_label.config(text="● 監視中", foreground="green")
+        self.start_btn.config(state="disabled")
+        self.stop_btn.config(state="normal")
 
     def _stop_monitor(self):
         if self._monitor_thread:
             self._monitor_thread.stop()
-        self.status_label.config(text="●  停止中", fg="#888")
-        self.start_btn.config(state="normal", bg="#007acc")
-        self.stop_btn.config(state="disabled", bg="#555", fg="#aaa")
+        self.status_label.config(text="● 停止中", foreground="gray")
+        self.start_btn.config(state="normal")
+        self.stop_btn.config(state="disabled")
 
     def _show_alert(self):
         _AlertWindow(self.frame.winfo_toplevel())
@@ -564,7 +523,6 @@ class ColorMonitorTab:
                 data = json.load(f)
         except Exception:
             return
-
         if data.get("start_color"):
             self._set_color("start", tuple(data["start_color"]))
         if data.get("end_color"):
@@ -580,7 +538,7 @@ class ColorMonitorTab:
             rx1, ry1, rx2, ry2 = r
             self.region_label.config(
                 text=f"相対座標 ({rx1}, {ry1})  サイズ {rx2-rx1}×{ry2-ry1}",
-                fg="white")
+                foreground="")
         if data.get("window_title"):
             self._refresh_windows(match_title=data["window_title"])
 

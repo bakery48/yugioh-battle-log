@@ -56,12 +56,12 @@ class MainWindow:
             style.configure("TFrame",       background=bg)
             style.configure("TLabelframe",  background=bg)
             style.configure("TLabelframe.Label", background=bg, foreground=fg,
-                            font=("Yu Gothic UI", 10, "bold"))
+                            font=("Meiryo", 10, "bold"))
             style.configure("TLabel",       background=bg, foreground=fg)
             style.configure("TCheckbutton", background=bg, foreground=fg)
             style.configure("TRadiobutton", background=bg, foreground=fg)
             style.configure("TEntry",       fieldbackground=field, foreground=fg,
-                            font=("Yu Gothic UI", 10))
+                            font=("Meiryo", 10))
             style.configure("TCombobox",    fieldbackground=field, foreground=fg)
             style.configure("TButton",      background="#4a4a4a", foreground=fg)
             style.map("TButton",
@@ -71,17 +71,17 @@ class MainWindow:
             style.configure("Treeview",
                             background=field, foreground=fg,
                             fieldbackground=field,
-                            rowheight=26, font=("Yu Gothic UI", 10))
+                            rowheight=26, font=("Meiryo", 10))
             style.configure("Treeview.Heading",
                             background="#353535", foreground="#cccccc",
-                            font=("Yu Gothic UI", 10, "bold"))
+                            font=("Meiryo", 10, "bold"))
             style.map("Treeview",
                       background=[("selected", sel_bg)],
                       foreground=[("selected", "white")])
             style.configure("TNotebook",     background=bg)
             style.configure("TNotebook.Tab",
                             background="#3c3f41", foreground="#aaaaaa",
-                            padding=[14, 6], font=("Yu Gothic UI", 10))
+                            padding=[14, 6], font=("Meiryo", 10))
             style.map("TNotebook.Tab",
                       background=[("selected", bg)],
                       foreground=[("selected", fg)])
@@ -90,8 +90,8 @@ class MainWindow:
                 if theme in style.theme_names():
                     style.theme_use(theme)
                     break
-            font = ("Yu Gothic UI", 10)
-            bold = ("Yu Gothic UI", 10, "bold")
+            font = ("Meiryo", 10)
+            bold = ("Meiryo", 10, "bold")
             style.configure(".",                   font=font)
             style.configure("TEntry",              font=font)
             style.configure("Treeview",            rowheight=26, font=font)
