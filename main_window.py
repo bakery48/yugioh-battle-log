@@ -7,6 +7,7 @@ from battle_tab import BattleTab
 from deck_tab import DeckTab
 from stats_tab import StatsTab
 from chart_tab import ChartTab
+from color_monitor_tab import ColorMonitorTab
 
 
 class MainWindow:
@@ -46,11 +47,15 @@ class MainWindow:
         )
         self.stats_tab = StatsTab(self.notebook)
         self.chart_tab = ChartTab(self.notebook)
+        self.color_monitor_tab = ColorMonitorTab(self.notebook)
 
-        self.notebook.add(self.battle_tab.frame,  text="  戦績一覧  ")
-        self.notebook.add(self.deck_tab.frame,    text="  デッキ管理  ")
-        self.notebook.add(self.stats_tab.frame,   text="  統計  ")
-        self.notebook.add(self.chart_tab.frame,   text="  デッキ分布  ")
+        self.notebook.add(self.battle_tab.frame,         text="  戦績一覧  ")
+        self.notebook.add(self.deck_tab.frame,           text="  デッキ管理  ")
+        self.notebook.add(self.stats_tab.frame,          text="  統計  ")
+        self.notebook.add(self.chart_tab.frame,          text="  デッキ分布  ")
+        self.notebook.add(self.color_monitor_tab.frame,  text="  色変化監視  ")
+
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
@@ -68,3 +73,7 @@ class MainWindow:
     def _on_deck_changed(self) -> None:
         """Called by DeckTab whenever decks are added / edited / deleted."""
         self.stats_tab.refresh_filter_lists()
+
+    def _on_close(self) -> None:
+        self.color_monitor_tab.save_settings()
+        self.root.destroy()
