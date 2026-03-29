@@ -28,6 +28,7 @@ class MainWindow:
         font = ("Yu Gothic UI", 10)
         bold = ("Yu Gothic UI", 10, "bold")
         style.configure(".", font=font)
+        style.configure("TEntry", font=font)        # fixes IME composition font mismatch
         style.configure("Treeview", rowheight=26, font=font)
         style.configure("Treeview.Heading", font=bold)
         style.configure("TNotebook.Tab", padding=[14, 6], font=font)
