@@ -11,7 +11,7 @@ import tkinter as tk
 import subprocess
 import database
 from main_window import MainWindow
-from ime_utils import install_ime_hook, get_status, _LOG_PATH
+from ime_utils import install_ime_hook, get_status, touch_fg_tick, _LOG_PATH
 
 
 def _git_hash() -> str:
@@ -57,6 +57,11 @@ def main() -> None:
             root.iconbitmap(icon_path)
         except Exception:
             pass
+
+    # Bind <FocusIn> on the root window so touch_fg_tick() is called whenever
+    # our app gains focus.  EVENT_SYSTEM_FOREGROUND does not reliably fire for
+    # tkinter windows, so this is the primary way _fg_tick stays current.
+    root.bind("<FocusIn>", lambda e: touch_fg_tick(), add="+")
 
     MainWindow(root)
 

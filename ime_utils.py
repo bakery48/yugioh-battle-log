@@ -45,6 +45,7 @@ _winevent_anchors = None   # extra objects kept alive
 _begin_count      = [0]   # incremented every time BeginUIElement fires
 _suppress_count   = [0]   # incremented every time we set pbShow=FALSE
 _ev_hide_count    = [0]   # incremented every time WinEvent hides a popup
+_fg_tick          = [0]   # GetTickCount value of last time our app had focus
 
 # ── C++ DLL helper ────────────────────────────────────────────────────────────
 _dll_helper = None          # ctypes.WinDLL instance if loaded
@@ -532,10 +533,11 @@ def _install_popup_watcher() -> None:
         # TextInputHost.exe (a system process); its class name is logged by
         # EV_POPUP_SHOW below so it can be identified and added here.
         SUPPRESS_SUBSTR = (
-            'Microsoft.IME.Candidate',   # Win11 IME candidate window class pattern
-            'CandidateUI',               # older in-process candidate UI
-            'ImmersiveContextMenu',      # occasionally used by IME on Win11
-            'Windows.UI.Core.CoreWindow',# WinRT host used by TextInputHost.exe
+            'Microsoft.IME.Candidate',      # Win11 IME candidate window class pattern
+            'CandidateUI',                  # older in-process candidate UI
+            'ImmersiveContextMenu',         # occasionally used by IME on Win11
+            'Windows.UI.Core.CoreWindow',   # WinRT host used by TextInputHost.exe
+            'XamlExplorerHostIslandWindow', # Win11 text-prediction popup (TextInputHost.exe)
         )
 
         u32   = ctypes.windll.user32
@@ -572,8 +574,10 @@ def _install_popup_watcher() -> None:
         k32.GetTickCount.argtypes = []
 
         # Timestamp (GetTickCount) when our app last had the foreground.
-        # Kept in a list so both closures below can mutate it.
-        _last_our_fg_tick = [k32.GetTickCount()]   # starts as "now"
+        # Stored in the module-level _fg_tick list so touch_fg_tick() (called
+        # from tkinter <FocusIn>) can update it without needing closure access.
+        _fg_tick[0] = k32.GetTickCount()   # starts as "now"
+        _last_our_fg_tick = _fg_tick       # alias so closures below work unchanged
         _FG_GRACE_MS = 1000   # allow 1 s after we last had focus
 
         WINEVENTPROC = ctypes.WINFUNCTYPE(
@@ -687,6 +691,24 @@ def _install_popup_watcher() -> None:
         _log(f"_install_popup_watcher FAILED: {e}")
         import traceback
         _log(traceback.format_exc())
+
+
+def touch_fg_tick() -> None:
+    """
+    Call this from tkinter <FocusIn> bindings whenever our app gains focus.
+    Updates the foreground-timestamp used by the WinEvent popup-watcher so
+    it knows our app recently had focus and can suppress the prediction popup.
+
+    The EVENT_SYSTEM_FOREGROUND WinEvent hook does NOT reliably fire for
+    tkinter windows, so this tkinter-side call is the primary update path.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        _fg_tick[0] = ctypes.windll.kernel32.GetTickCount()
+    except Exception:
+        pass
 
 
 def suppress_ime_popup(widget) -> None:   # noqa: ARG001
