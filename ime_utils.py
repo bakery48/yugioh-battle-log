@@ -36,6 +36,8 @@ def _log(msg: str) -> None:
 # ── Module-level anchors ──────────────────────────────────────────────────────
 _hook_handle      = None
 _hook_cb          = None
+_getmsg_handle    = None   # WH_GETMESSAGE hook handle
+_getmsg_cb        = None
 _tsf_anchors      = None
 _winevent_handle  = None   # SetWinEventHook handle
 _winevent_cb      = None   # WINEVENTPROC kept alive
@@ -53,6 +55,7 @@ def install_ime_hook() -> None:
         _log("Not Windows — skipping")
         return
     _install_wh_hook()
+    _install_getmsg_hook()
     _install_tsf_sink()
     _install_popup_watcher()
     _log(f"WH hook handle : {_hook_handle}")
@@ -71,6 +74,7 @@ def get_status() -> str:
     """Return a one-line status string (shown in the title bar, refreshed periodically)."""
     parts = []
     parts.append("WH:" + ("OK" if _hook_handle else "NG"))
+    parts.append("GM:" + ("OK" if _getmsg_handle else "NG"))
     parts.append("TSF:" + ("OK" if _tsf_anchors is not None else "NG"))
     parts.append("EV:" + ("OK" if _winevent_handle else "NG"))
     parts.append(f"BE:{_begin_count[0]}/{_suppress_count[0]}")   # TSF calls/suppressed
@@ -190,6 +194,81 @@ def _install_wh_hook() -> None:
         _log(f"WH_CALLWNDPROC installed: handle={_hook_handle}")
     except Exception as e:
         _log(f"WH hook install FAILED: {e}")
+
+
+# ─── WH_GETMESSAGE hook (covers *posted* WM_IME_NOTIFY) ──────────────────────
+
+def _install_getmsg_hook() -> None:
+    global _getmsg_handle, _getmsg_cb
+    if _getmsg_handle is not None:
+        return
+    try:
+        import ctypes, ctypes.wintypes as wt
+
+        WH_GETMESSAGE     = 3
+        HC_ACTION         = 0
+        WM_NULL           = 0x0000
+        WM_IME_NOTIFY     = 0x0282
+        IMN_OPENCANDIDATE = 0x0001
+        IMN_CHANGECANDIDATE = 0x0002
+        PM_REMOVE         = 0x0001   # wParam value meaning message was removed
+
+        class MSG(ctypes.Structure):
+            _fields_ = [("hwnd",    wt.HWND),
+                        ("message", wt.UINT),
+                        ("wParam",  wt.WPARAM),
+                        ("lParam",  wt.LPARAM),
+                        ("time",    wt.DWORD),
+                        ("pt",      wt.POINT)]
+
+        HOOKPROC_GM = ctypes.WINFUNCTYPE(
+            ctypes.c_longlong, ctypes.c_int, wt.WPARAM, wt.LPARAM)
+
+        u32   = ctypes.windll.user32
+        imm32 = ctypes.windll.imm32
+        k32   = ctypes.windll.kernel32
+
+        u32.CallNextHookEx.restype    = ctypes.c_longlong
+        u32.CallNextHookEx.argtypes   = [ctypes.c_void_p, ctypes.c_int, wt.WPARAM, wt.LPARAM]
+        u32.SetWindowsHookExW.restype  = ctypes.c_void_p
+        u32.SetWindowsHookExW.argtypes = [ctypes.c_int, ctypes.c_void_p, wt.HINSTANCE, wt.DWORD]
+        k32.GetCurrentThreadId.restype  = wt.DWORD
+        k32.GetCurrentThreadId.argtypes = []
+        imm32.ImmGetContext.restype    = ctypes.c_void_p
+        imm32.ImmGetContext.argtypes   = [wt.HWND]
+        imm32.ImmReleaseContext.restype  = ctypes.c_bool
+        imm32.ImmReleaseContext.argtypes = [wt.HWND, ctypes.c_void_p]
+        imm32.ImmNotifyIME.restype  = ctypes.c_bool
+        imm32.ImmNotifyIME.argtypes = [ctypes.c_void_p, wt.DWORD, wt.DWORD, wt.DWORD]
+
+        NI_CLOSECANDIDATE = 0x0011
+
+        def _getmsg(nCode, wParam, lParam):
+            # wParam == PM_REMOVE means the message will actually be dispatched
+            if nCode == HC_ACTION and wParam == PM_REMOVE:
+                msg = ctypes.cast(lParam, ctypes.POINTER(MSG)).contents
+                if (msg.message == WM_IME_NOTIFY
+                        and msg.wParam in (IMN_OPENCANDIDATE, IMN_CHANGECANDIDATE)):
+                    _log(f"GM IMN_OPENCANDIDATE hwnd={msg.hwnd} wParam={msg.wParam:#x}")
+                    if msg.hwnd:
+                        himc = imm32.ImmGetContext(msg.hwnd)
+                        if himc:
+                            if not _in_kanji_selection(imm32, himc):
+                                # Swallow the posted message
+                                msg.message = WM_NULL
+                                # Also close via IME API
+                                imm32.ImmNotifyIME(himc, NI_CLOSECANDIDATE, 0, 0)
+                                _log("  GM → suppressed + NI_CLOSECANDIDATE")
+                            imm32.ImmReleaseContext(msg.hwnd, himc)
+            return u32.CallNextHookEx(_getmsg_handle, nCode, wParam, lParam)
+
+        _getmsg_cb = HOOKPROC_GM(_getmsg)
+        cb_addr = ctypes.cast(_getmsg_cb, ctypes.c_void_p).value or 0
+        _getmsg_handle = u32.SetWindowsHookExW(
+            WH_GETMESSAGE, cb_addr, None, k32.GetCurrentThreadId())
+        _log(f"WH_GETMESSAGE installed: handle={_getmsg_handle}")
+    except Exception as e:
+        _log(f"WH_GETMESSAGE install FAILED: {e}")
 
 
 # ─── TSF ITfUIElementSink ─────────────────────────────────────────────────────
@@ -434,10 +513,12 @@ def _install_popup_watcher() -> None:
         u32.ShowWindow.argtypes       = [wt.HWND, wt.INT]
         u32.GetFocus.restype          = wt.HWND
         u32.GetFocus.argtypes         = []
-        imm32.ImmGetContext.restype   = ctypes.c_void_p
-        imm32.ImmGetContext.argtypes  = [wt.HWND]
+        imm32.ImmGetContext.restype    = ctypes.c_void_p
+        imm32.ImmGetContext.argtypes   = [wt.HWND]
         imm32.ImmReleaseContext.restype  = wt.BOOL
         imm32.ImmReleaseContext.argtypes = [wt.HWND, ctypes.c_void_p]
+        imm32.ImmNotifyIME.restype    = ctypes.c_bool
+        imm32.ImmNotifyIME.argtypes   = [ctypes.c_void_p, wt.DWORD, wt.DWORD, wt.DWORD]
         k32.GetCurrentProcessId.restype  = wt.DWORD
         k32.GetCurrentProcessId.argtypes = []
 
@@ -477,9 +558,21 @@ def _install_popup_watcher() -> None:
                 if kanji:
                     _log(f"  → kanji mode, showing {cn!r}")
                 else:
+                    # 1. Tell the IME to close the candidate window via its own API.
+                    #    This stops the IME from re-opening it, breaking the
+                    #    show/hide loop that pure ShowWindow(SW_HIDE) causes.
+                    NI_CLOSECANDIDATE = 0x0011
+                    hwnd_focus = u32.GetFocus()
+                    if hwnd_focus:
+                        himc = imm32.ImmGetContext(hwnd_focus)
+                        if himc:
+                            for slot in range(4):
+                                imm32.ImmNotifyIME(himc, NI_CLOSECANDIDATE, slot, 0)
+                            imm32.ImmReleaseContext(hwnd_focus, himc)
+                    # 2. Also hide the window directly as a belt-and-suspenders.
                     u32.ShowWindow(hwnd, SW_HIDE)
                     _ev_hide_count[0] += 1
-                    _log(f"  → HIDDEN #{_ev_hide_count[0]} (class={cn!r})")
+                    _log(f"  → HIDDEN+NI_CLOSE #{_ev_hide_count[0]} (class={cn!r})")
             except Exception as exc:
                 _log(f"_on_show error: {exc}")
 
