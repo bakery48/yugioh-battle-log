@@ -7,9 +7,9 @@ import customtkinter as ctk
 import database as db
 from constants import RANKS
 
-_FONT      = ctk.CTkFont(family="Meiryo", size=10)
-_FONT_BOLD = ctk.CTkFont(family="Meiryo", size=10, weight="bold")
-_FONT_SUM  = ctk.CTkFont(family="Meiryo", size=13, weight="bold")
+_FONT      = ("Meiryo", 10)
+_FONT_BOLD = ("Meiryo", 10, "bold")
+_FONT_SUM  = ("Meiryo", 13, "bold")
 
 _LIGHT_STATS_ROWS = ["#f0f4ff", "#f9f9f9", "#fffde7"]
 _DARK_STATS_ROWS  = ["#1e2040", "#2a2a2a", "#2a2510"]

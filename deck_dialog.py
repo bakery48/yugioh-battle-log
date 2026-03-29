@@ -5,8 +5,8 @@ from tkinter import messagebox
 from typing import Optional
 import customtkinter as ctk
 
-_FONT      = ctk.CTkFont(family="Meiryo", size=10)
-_FONT_BOLD = ctk.CTkFont(family="Meiryo", size=10, weight="bold")
+_FONT      = ("Meiryo", 10)
+_FONT_BOLD = ("Meiryo", 10, "bold")
 
 
 class DeckDialog:

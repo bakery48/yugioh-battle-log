@@ -8,8 +8,8 @@ import customtkinter as ctk
 import database as db
 from constants import RANKS, MPL_FONT_CANDIDATES
 
-_FONT      = ctk.CTkFont(family="Meiryo", size=10)
-_FONT_BOLD = ctk.CTkFont(family="Meiryo", size=10, weight="bold")
+_FONT      = ("Meiryo", 10)
+_FONT_BOLD = ("Meiryo", 10, "bold")
 
 try:
     import matplotlib

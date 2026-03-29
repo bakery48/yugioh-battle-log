@@ -9,9 +9,9 @@ import customtkinter as ctk
 
 from constants import RANKS, FIRST_SECOND_OPTIONS, RESULT_OPTIONS
 
-_FONT      = ctk.CTkFont(family="Meiryo", size=10)
-_FONT_BOLD = ctk.CTkFont(family="Meiryo", size=10, weight="bold")
-_FONT_SM   = ctk.CTkFont(family="Meiryo", size=9)
+_FONT      = ("Meiryo", 10)
+_FONT_BOLD = ("Meiryo", 10, "bold")
+_FONT_SM   = ("Meiryo", 9)
 
 
 class BattleDialog:
