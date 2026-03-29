@@ -112,9 +112,10 @@ class BattleDialog:
         self.opponent_deck_var = tk.StringVar(
             value=battle["opponent_deck"] if battle else ""
         )
-        ttk.Entry(frame, textvariable=self.opponent_deck_var, width=35).grid(
-            row=6, column=1, columnspan=2, sticky=tk.W, **pad
-        )
+        ttk.Combobox(
+            frame, textvariable=self.opponent_deck_var,
+            values=deck_names, state="normal", width=33
+        ).grid(row=6, column=1, columnspan=2, sticky=tk.W, **pad)
 
         # ── Buttons ───────────────────────────────────────────────────────────
         btn_frame = ttk.Frame(frame)
