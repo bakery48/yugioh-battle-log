@@ -34,11 +34,15 @@ def _log(msg: str) -> None:
 
 
 # ── Module-level anchors ──────────────────────────────────────────────────────
-_hook_handle    = None
-_hook_cb        = None
-_tsf_anchors    = None
-_begin_count    = [0]   # incremented every time BeginUIElement fires
-_suppress_count = [0]   # incremented every time we set pbShow=FALSE
+_hook_handle      = None
+_hook_cb          = None
+_tsf_anchors      = None
+_winevent_handle  = None   # SetWinEventHook handle
+_winevent_cb      = None   # WINEVENTPROC kept alive
+_winevent_anchors = None   # extra objects kept alive
+_begin_count      = [0]   # incremented every time BeginUIElement fires
+_suppress_count   = [0]   # incremented every time we set pbShow=FALSE
+_ev_hide_count    = [0]   # incremented every time WinEvent hides a popup
 
 
 def install_ime_hook() -> None:
@@ -50,8 +54,10 @@ def install_ime_hook() -> None:
         return
     _install_wh_hook()
     _install_tsf_sink()
+    _install_popup_watcher()
     _log(f"WH hook handle : {_hook_handle}")
     _log(f"TSF anchors set: {_tsf_anchors is not None}")
+    _log(f"WinEvent handle: {_winevent_handle}")
     # Also dump the log to stdout so the console always shows what happened
     try:
         with open(_LOG_PATH, "r", encoding="utf-8") as _f:
@@ -66,7 +72,9 @@ def get_status() -> str:
     parts = []
     parts.append("WH:" + ("OK" if _hook_handle else "NG"))
     parts.append("TSF:" + ("OK" if _tsf_anchors is not None else "NG"))
-    parts.append(f"BE:{_begin_count[0]}/{_suppress_count[0]}")  # calls/suppressed
+    parts.append("EV:" + ("OK" if _winevent_handle else "NG"))
+    parts.append(f"BE:{_begin_count[0]}/{_suppress_count[0]}")   # TSF calls/suppressed
+    parts.append(f"EH:{_ev_hide_count[0]}")                       # WinEvent hides
     parts.append(f"v{_FILE_TS}")
     return "  [IME " + " ".join(parts) + "]"
 
@@ -149,6 +157,7 @@ def _install_wh_hook() -> None:
                 elif (cwp.message == WM_IME_NOTIFY
                       and cwp.wParam in (IMN_OPENCANDIDATE, IMN_CHANGECANDIDATE)
                       and not _suppressing[0]):
+                    _log(f"WH IMN_OPENCANDIDATE hwnd={cwp.hwnd} wParam={cwp.wParam:#x}")
                     himc = imm32.ImmGetContext(cwp.hwnd)
                     if himc:
                         if not _in_kanji_selection(imm32, himc):
@@ -369,6 +378,123 @@ def _install_tsf_sink() -> None:
 
     except Exception as e:
         _log(f"_install_tsf_sink EXCEPTION: {e}")
+        import traceback
+        _log(traceback.format_exc())
+
+
+# ─── WinEvent popup watcher ──────────────────────────────────────────────────
+
+def _install_popup_watcher() -> None:
+    """
+    SetWinEventHook(EVENT_OBJECT_SHOW) scoped to our process.
+
+    Every time a WS_POPUP window appears we log its class name.
+    If the class name matches a known IME candidate/prediction pattern AND
+    we are not currently in kanji-selection mode, we hide the window
+    immediately via ShowWindow(SW_HIDE).
+
+    The log entries let us identify new class names should new Windows
+    versions change the popup class.
+    """
+    global _winevent_handle, _winevent_cb, _winevent_anchors
+    if _winevent_handle is not None:
+        return
+    try:
+        import ctypes, ctypes.wintypes as wt
+
+        WINEVENT_OUTOFCONTEXT = 0x0000
+        EVENT_OBJECT_SHOW     = 0x8002
+        WS_POPUP              = 0x80000000
+        GWL_STYLE             = -16
+        SW_HIDE               = 0
+
+        # Known Windows 11 Japanese IME candidate / text-prediction classes.
+        # Any window whose class contains one of these substrings (case-sensitive)
+        # will be suppressed unless kanji-selection is active.
+        SUPPRESS_SUBSTR = (
+            'Microsoft.IME',     # covers all Microsoft.IME.* classes
+            'CandidateUI',       # CandidateUI_Window
+            'MSCTFIME',          # legacy TSF IME UI
+            'ImmersiveContextMenu',  # sometimes used by IME on Win11
+        )
+
+        u32   = ctypes.windll.user32
+        imm32 = ctypes.windll.imm32
+        k32   = ctypes.windll.kernel32
+
+        u32.SetWinEventHook.restype   = wt.HANDLE
+        u32.SetWinEventHook.argtypes  = [wt.DWORD, wt.DWORD, wt.HMODULE,
+                                          ctypes.c_void_p, wt.DWORD, wt.DWORD,
+                                          wt.DWORD]
+        u32.GetWindowLongW.restype    = wt.LONG
+        u32.GetWindowLongW.argtypes   = [wt.HWND, wt.INT]
+        u32.GetClassNameW.restype     = wt.INT
+        u32.GetClassNameW.argtypes    = [wt.HWND, ctypes.c_wchar_p, wt.INT]
+        u32.ShowWindow.restype        = wt.BOOL
+        u32.ShowWindow.argtypes       = [wt.HWND, wt.INT]
+        u32.GetFocus.restype          = wt.HWND
+        u32.GetFocus.argtypes         = []
+        imm32.ImmGetContext.restype   = ctypes.c_void_p
+        imm32.ImmGetContext.argtypes  = [wt.HWND]
+        imm32.ImmReleaseContext.restype  = wt.BOOL
+        imm32.ImmReleaseContext.argtypes = [wt.HWND, ctypes.c_void_p]
+        k32.GetCurrentProcessId.restype  = wt.DWORD
+        k32.GetCurrentProcessId.argtypes = []
+
+        our_pid = k32.GetCurrentProcessId()
+
+        WINEVENTPROC = ctypes.WINFUNCTYPE(
+            None, wt.HANDLE, wt.DWORD, wt.HWND,
+            wt.LONG, wt.LONG, wt.DWORD, wt.DWORD)
+
+        def _on_show(hook, event, hwnd, idObj, idChild, tid_ev, ts):
+            if not hwnd:
+                return
+            try:
+                style = u32.GetWindowLongW(hwnd, GWL_STYLE)
+                if not (style & WS_POPUP):
+                    return   # only care about popup windows
+
+                cb = (ctypes.c_wchar * 128)()
+                u32.GetClassNameW(hwnd, cb, 128)
+                cn = cb.value
+
+                # Log every popup so we can identify unknown classes later
+                _log(f"EV_POPUP_SHOW hwnd={hwnd:#x} class={cn!r}")
+
+                should_suppress = any(s in cn for s in SUPPRESS_SUBSTR)
+                if not should_suppress:
+                    return
+
+                hwnd_focus = u32.GetFocus()
+                kanji = False
+                if hwnd_focus:
+                    himc = imm32.ImmGetContext(hwnd_focus)
+                    if himc:
+                        kanji = _in_kanji_selection(imm32, himc)
+                        imm32.ImmReleaseContext(hwnd_focus, himc)
+
+                if kanji:
+                    _log(f"  → kanji mode, showing {cn!r}")
+                else:
+                    u32.ShowWindow(hwnd, SW_HIDE)
+                    _ev_hide_count[0] += 1
+                    _log(f"  → HIDDEN #{_ev_hide_count[0]} (class={cn!r})")
+            except Exception as exc:
+                _log(f"_on_show error: {exc}")
+
+        _winevent_cb = WINEVENTPROC(_on_show)
+        cb_ptr = ctypes.cast(_winevent_cb, ctypes.c_void_p).value or 0
+        _winevent_handle = u32.SetWinEventHook(
+            EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW,
+            None, cb_ptr,
+            our_pid, 0,   # our process, all threads
+            WINEVENT_OUTOFCONTEXT)
+
+        _winevent_anchors = (_winevent_cb,)
+        _log(f"SetWinEventHook(EVENT_OBJECT_SHOW pid={our_pid}) handle={_winevent_handle}")
+    except Exception as e:
+        _log(f"_install_popup_watcher FAILED: {e}")
         import traceback
         _log(traceback.format_exc())
 
