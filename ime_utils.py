@@ -489,14 +489,15 @@ def _install_popup_watcher() -> None:
 
         # Class substrings to suppress.
         # IMPORTANT: do NOT include 'MSCTFIME' here — 'MSCTFIME Composition'
-        # is the IME composition-string window (shows the pre-confirmation
-        # kana text the user is typing) and must NOT be hidden.
-        # The actual candidate/prediction LIST window is typically in
-        # TextInputHost.exe; its class is logged below so we can refine this.
+        # is the composition-string window (pre-confirmation kana display).
+        # The actual candidate/prediction LIST window lives in
+        # TextInputHost.exe (a system process); its class name is logged by
+        # EV_POPUP_SHOW below so it can be identified and added here.
         SUPPRESS_SUBSTR = (
-            'Microsoft.IME.Candidate',   # Win11 IME candidate window (in TextInputHost)
+            'Microsoft.IME.Candidate',   # Win11 IME candidate window class pattern
             'CandidateUI',               # older in-process candidate UI
             'ImmersiveContextMenu',      # occasionally used by IME on Win11
+            'Windows.UI.Core.CoreWindow',# WinRT host used by TextInputHost.exe
         )
 
         u32   = ctypes.windll.user32
@@ -529,27 +530,63 @@ def _install_popup_watcher() -> None:
         k32.GetCurrentProcessId.argtypes = []
 
         our_pid = k32.GetCurrentProcessId()
+        k32.GetTickCount.restype  = wt.DWORD
+        k32.GetTickCount.argtypes = []
 
-        def _our_app_is_foreground() -> bool:
-            fg = u32.GetForegroundWindow()
-            if not fg:
-                return False
-            pid = wt.DWORD(0)
-            u32.GetWindowThreadProcessId(fg, ctypes.byref(pid))
-            return pid.value == our_pid
+        # Timestamp (GetTickCount) when our app last had the foreground.
+        # Kept in a list so both closures below can mutate it.
+        _last_our_fg_tick = [k32.GetTickCount()]   # starts as "now"
+        _FG_GRACE_MS = 1000   # allow 1 s after we last had focus
 
         WINEVENTPROC = ctypes.WINFUNCTYPE(
             None, wt.HANDLE, wt.DWORD, wt.HWND,
             wt.LONG, wt.LONG, wt.DWORD, wt.DWORD)
 
+        # Track EVENT_SYSTEM_FOREGROUND so we know when our app last had focus.
+        # The IME candidate window in TextInputHost.exe is a tool window that
+        # does NOT steal the foreground, so GetForegroundWindow() at the time
+        # EVENT_OBJECT_SHOW fires should still return our window.  But to be
+        # safe we keep a 1-second grace window.
+        EVENT_SYSTEM_FOREGROUND = 0x0003
+
+        def _on_fg(hook, event, hwnd, idObj, idChild, tid_ev, ts):
+            try:
+                pid = wt.DWORD(0)
+                u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                if pid.value == our_pid:
+                    _last_our_fg_tick[0] = k32.GetTickCount()
+            except Exception:
+                pass
+
+        _fg_cb = WINEVENTPROC(_on_fg)
+        _fg_hook = u32.SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+            None, ctypes.cast(_fg_cb, ctypes.c_void_p).value or 0,
+            0, 0, WINEVENT_OUTOFCONTEXT)
+        _log(f"SetWinEventHook(FG_TRACK) handle={_fg_hook}")
+
+        def _our_app_recently_foreground() -> bool:
+            # Fast path: still the foreground right now
+            fg = u32.GetForegroundWindow()
+            if fg:
+                pid = wt.DWORD(0)
+                u32.GetWindowThreadProcessId(fg, ctypes.byref(pid))
+                if pid.value == our_pid:
+                    _last_our_fg_tick[0] = k32.GetTickCount()
+                    return True
+            # Slow path: were we foreground within the grace window?
+            elapsed = k32.GetTickCount() - _last_our_fg_tick[0]
+            if elapsed < _FG_GRACE_MS:
+                return True
+            _log(f"EV skip: our app not fg (elapsed={elapsed}ms)")
+            return False
+
         def _on_show(hook, event, hwnd, idObj, idChild, tid_ev, ts):
             if not hwnd:
                 return
             try:
-                # Fast exit: only act when our application has the foreground.
-                # This keeps the pid=0 scope cheap for the common case (other
-                # apps are active).
-                if not _our_app_is_foreground():
+                # Fast exit: only act when our app recently had focus.
+                if not _our_app_recently_foreground():
                     return
 
                 style = u32.GetWindowLongW(hwnd, GWL_STYLE)
@@ -606,7 +643,7 @@ def _install_popup_watcher() -> None:
             0, 0,   # all processes – foreground guard inside _on_show
             WINEVENT_OUTOFCONTEXT)
 
-        _winevent_anchors = (_winevent_cb, _our_app_is_foreground)
+        _winevent_anchors = (_winevent_cb, _fg_cb, _fg_hook, _on_fg, _our_app_recently_foreground)
         _log(f"SetWinEventHook(EVENT_OBJECT_SHOW pid=0/all) handle={_winevent_handle}")
     except Exception as e:
         _log(f"_install_popup_watcher FAILED: {e}")
