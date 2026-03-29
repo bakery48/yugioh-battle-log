@@ -487,14 +487,16 @@ def _install_popup_watcher() -> None:
         GWL_STYLE             = -16
         SW_HIDE               = 0
 
-        # Known Windows 11 Japanese IME candidate / text-prediction classes.
-        # Any window whose class contains one of these substrings (case-sensitive)
-        # will be suppressed unless kanji-selection is active.
+        # Class substrings to suppress.
+        # IMPORTANT: do NOT include 'MSCTFIME' here — 'MSCTFIME Composition'
+        # is the IME composition-string window (shows the pre-confirmation
+        # kana text the user is typing) and must NOT be hidden.
+        # The actual candidate/prediction LIST window is typically in
+        # TextInputHost.exe; its class is logged below so we can refine this.
         SUPPRESS_SUBSTR = (
-            'Microsoft.IME',     # covers all Microsoft.IME.* classes
-            'CandidateUI',       # CandidateUI_Window
-            'MSCTFIME',          # legacy TSF IME UI
-            'ImmersiveContextMenu',  # sometimes used by IME on Win11
+            'Microsoft.IME.Candidate',   # Win11 IME candidate window (in TextInputHost)
+            'CandidateUI',               # older in-process candidate UI
+            'ImmersiveContextMenu',      # occasionally used by IME on Win11
         )
 
         u32   = ctypes.windll.user32
@@ -511,8 +513,12 @@ def _install_popup_watcher() -> None:
         u32.GetClassNameW.argtypes    = [wt.HWND, ctypes.c_wchar_p, wt.INT]
         u32.ShowWindow.restype        = wt.BOOL
         u32.ShowWindow.argtypes       = [wt.HWND, wt.INT]
-        u32.GetFocus.restype          = wt.HWND
-        u32.GetFocus.argtypes         = []
+        u32.GetFocus.restype               = wt.HWND
+        u32.GetFocus.argtypes              = []
+        u32.GetForegroundWindow.restype    = wt.HWND
+        u32.GetForegroundWindow.argtypes   = []
+        u32.GetWindowThreadProcessId.restype  = wt.DWORD
+        u32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
         imm32.ImmGetContext.restype    = ctypes.c_void_p
         imm32.ImmGetContext.argtypes   = [wt.HWND]
         imm32.ImmReleaseContext.restype  = wt.BOOL
@@ -524,6 +530,14 @@ def _install_popup_watcher() -> None:
 
         our_pid = k32.GetCurrentProcessId()
 
+        def _our_app_is_foreground() -> bool:
+            fg = u32.GetForegroundWindow()
+            if not fg:
+                return False
+            pid = wt.DWORD(0)
+            u32.GetWindowThreadProcessId(fg, ctypes.byref(pid))
+            return pid.value == our_pid
+
         WINEVENTPROC = ctypes.WINFUNCTYPE(
             None, wt.HANDLE, wt.DWORD, wt.HWND,
             wt.LONG, wt.LONG, wt.DWORD, wt.DWORD)
@@ -532,6 +546,12 @@ def _install_popup_watcher() -> None:
             if not hwnd:
                 return
             try:
+                # Fast exit: only act when our application has the foreground.
+                # This keeps the pid=0 scope cheap for the common case (other
+                # apps are active).
+                if not _our_app_is_foreground():
+                    return
+
                 style = u32.GetWindowLongW(hwnd, GWL_STYLE)
                 if not (style & WS_POPUP):
                     return   # only care about popup windows
@@ -540,7 +560,9 @@ def _install_popup_watcher() -> None:
                 u32.GetClassNameW(hwnd, cb, 128)
                 cn = cb.value
 
-                # Log every popup so we can identify unknown classes later
+                # Log every popup so we can identify unknown class names.
+                # This is especially useful for windows in other processes
+                # (e.g. TextInputHost.exe) that host the IME candidate UI.
                 _log(f"EV_POPUP_SHOW hwnd={hwnd:#x} class={cn!r}")
 
                 should_suppress = any(s in cn for s in SUPPRESS_SUBSTR)
@@ -581,11 +603,11 @@ def _install_popup_watcher() -> None:
         _winevent_handle = u32.SetWinEventHook(
             EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW,
             None, cb_ptr,
-            our_pid, 0,   # our process, all threads
+            0, 0,   # all processes – foreground guard inside _on_show
             WINEVENT_OUTOFCONTEXT)
 
-        _winevent_anchors = (_winevent_cb,)
-        _log(f"SetWinEventHook(EVENT_OBJECT_SHOW pid={our_pid}) handle={_winevent_handle}")
+        _winevent_anchors = (_winevent_cb, _our_app_is_foreground)
+        _log(f"SetWinEventHook(EVENT_OBJECT_SHOW pid=0/all) handle={_winevent_handle}")
     except Exception as e:
         _log(f"_install_popup_watcher FAILED: {e}")
         import traceback
