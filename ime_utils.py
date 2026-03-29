@@ -1,23 +1,24 @@
 """
 Windows IME composition font fix.
 
-ImmSetCompositionFontW を Entry の FocusIn 時に呼ぶことで、
-変換前（確定前）と変換後でフォントが変わる問題を解消する。
+HWND の DC から現在の GDI フォントを読み取り、そのまま IME 合成フォントに
+セットすることで、変換前（確定前）と変換後でフォントが変わる問題を解消する。
+フォント名・サイズをハードコードしないため CTk のスケーリングにも対応。
 """
 
 import sys
 
 
-def fix_entry_ime_font(hwnd_id: int,
-                       font_name: str = "Meiryo",
-                       point_size: int = 10) -> None:
+def fix_entry_ime_font(hwnd_id: int) -> None:
     """
-    Call ImmSetCompositionFontW so the IME composition (pre-confirmation)
-    string is rendered in the same font as confirmed text.
+    Read the widget's actual GDI font from its DC and pass it to
+    ImmSetCompositionFontW, ensuring pre/post-confirmation text look identical.
 
     Usage in main.py:
-        root.bind_class("TEntry", "<FocusIn>",
-                        lambda e: fix_entry_ime_font(e.widget.winfo_id()), add="+")
+        for cls in ("TEntry", "Entry"):
+            root.bind_class(cls, "<FocusIn>",
+                            lambda e: fix_entry_ime_font(e.widget.winfo_id()),
+                            add="+")
     """
     if sys.platform != "win32":
         return
@@ -46,17 +47,20 @@ def fix_entry_ime_font(hwnd_id: int,
         u32   = ctypes.windll.user32
         gdi32 = ctypes.windll.gdi32
         imm32 = ctypes.windll.imm32
-        hwnd  = wt.HWND(hwnd_id)
-        hdc   = u32.GetDC(hwnd)
-        dpi   = gdi32.GetDeviceCaps(hdc, 90)  # LOGPIXELSY
+
+        OBJ_FONT = 6
+        hwnd = wt.HWND(hwnd_id)
+        hdc  = u32.GetDC(hwnd)
+
+        # Read the font currently selected in the widget's DC —
+        # this automatically reflects CTk's DPI/widget scaling.
+        hfont = gdi32.GetCurrentObject(hdc, OBJ_FONT)
+        lf = LOGFONT()
+        gdi32.GetObjectW(hfont, ctypes.sizeof(lf), ctypes.byref(lf))
         u32.ReleaseDC(hwnd, hdc)
 
-        lf = LOGFONT()
-        lf.lfHeight   = -int(point_size * dpi / 72)
-        lf.lfWeight   = 400   # FW_NORMAL
-        lf.lfCharSet  = 128   # SHIFTJIS_CHARSET
-        lf.lfQuality  = 5     # CLEARTYPE_QUALITY
-        lf.lfFaceName = font_name
+        # Ensure Japanese glyphs render correctly in the composition window.
+        lf.lfCharSet = 128  # SHIFTJIS_CHARSET
 
         himc = imm32.ImmGetContext(hwnd)
         if himc:

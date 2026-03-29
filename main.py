@@ -51,9 +51,13 @@ def main() -> None:
         except Exception:
             pass
 
-    # CTkEntry internally uses ttk.Entry (class tag "TEntry"), so this still fires.
-    root.bind_class("TEntry", "<FocusIn>",
-                    lambda e: fix_entry_ime_font(e.widget.winfo_id()), add="+")
+    # CTkEntry  → internal ttk.Entry  (class "TEntry")
+    # CTkComboBox → internal tk.Entry (class "Entry")
+    # Both need the IME font fix.
+    for _cls in ("TEntry", "Entry"):
+        root.bind_class(_cls, "<FocusIn>",
+                        lambda e: fix_entry_ime_font(e.widget.winfo_id()),
+                        add="+")
 
     MainWindow(root)
     root.mainloop()
