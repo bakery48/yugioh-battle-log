@@ -1,31 +1,52 @@
 """
 Windows IME composition font fix.
 
-HWND の DC から現在の GDI フォントを読み取り、そのまま IME 合成フォントに
-セットすることで、変換前（確定前）と変換後でフォントが変わる問題を解消する。
-フォント名・サイズをハードコードしないため CTk のスケーリングにも対応。
+ウィジェットの実際のフォントを tkinter のフォントシステムから読み取り、
+ImmSetCompositionFontW に渡すことで変換前後のフォント不一致を解消する。
+CTk の DPI スケーリングにも追従する。
 """
 
 import sys
 
 
-def fix_entry_ime_font(hwnd_id: int) -> None:
+def fix_entry_ime_font(widget) -> None:
     """
-    Read the widget's actual GDI font from its DC and pass it to
-    ImmSetCompositionFontW, ensuring pre/post-confirmation text look identical.
+    Read the widget's actual rendered font via tkinter's font API and
+    pass it to ImmSetCompositionFontW.
 
     Usage in main.py:
         for cls in ("TEntry", "Entry"):
             root.bind_class(cls, "<FocusIn>",
-                            lambda e: fix_entry_ime_font(e.widget.winfo_id()),
-                            add="+")
+                            lambda e: fix_entry_ime_font(e.widget), add="+")
     """
     if sys.platform != "win32":
         return
     try:
         import ctypes
         import ctypes.wintypes as wt
+        import tkinter.font as tkfont
 
+        # ── Read actual font from the widget ──────────────────────────────────
+        family   = "Meiryo"
+        size_pt  = 10
+        size_px  = None          # set if size is already in pixels (negative)
+        try:
+            font_spec = widget.cget("font")
+            if font_spec:
+                f = tkfont.Font(font=font_spec)
+                actual = f.actual()
+                fam = actual.get("family", "")
+                if fam:
+                    family = fam
+                sz = actual.get("size", 10)
+                if sz > 0:       # positive → logical points
+                    size_pt = sz
+                elif sz < 0:     # negative → pixels
+                    size_px = sz  # use directly as lfHeight
+        except Exception:
+            pass
+
+        # ── Build LOGFONT ─────────────────────────────────────────────────────
         class LOGFONT(ctypes.Structure):
             _fields_ = [
                 ("lfHeight",         wt.LONG),
@@ -48,19 +69,22 @@ def fix_entry_ime_font(hwnd_id: int) -> None:
         gdi32 = ctypes.windll.gdi32
         imm32 = ctypes.windll.imm32
 
-        OBJ_FONT = 6
-        hwnd = wt.HWND(hwnd_id)
-        hdc  = u32.GetDC(hwnd)
+        hwnd = wt.HWND(widget.winfo_id())
 
-        # Read the font currently selected in the widget's DC —
-        # this automatically reflects CTk's DPI/widget scaling.
-        hfont = gdi32.GetCurrentObject(hdc, OBJ_FONT)
+        if size_px is not None:
+            lf_height = size_px          # already pixels, already negative
+        else:
+            hdc = u32.GetDC(hwnd)
+            dpi = gdi32.GetDeviceCaps(hdc, 90)   # LOGPIXELSY
+            u32.ReleaseDC(hwnd, hdc)
+            lf_height = -int(size_pt * dpi / 72)
+
         lf = LOGFONT()
-        gdi32.GetObjectW(hfont, ctypes.sizeof(lf), ctypes.byref(lf))
-        u32.ReleaseDC(hwnd, hdc)
-
-        # Ensure Japanese glyphs render correctly in the composition window.
-        lf.lfCharSet = 128  # SHIFTJIS_CHARSET
+        lf.lfHeight   = lf_height
+        lf.lfWeight   = 400   # FW_NORMAL
+        lf.lfCharSet  = 128   # SHIFTJIS_CHARSET
+        lf.lfQuality  = 5     # CLEARTYPE_QUALITY
+        lf.lfFaceName = family
 
         himc = imm32.ImmGetContext(hwnd)
         if himc:

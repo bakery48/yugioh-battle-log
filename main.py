@@ -56,7 +56,7 @@ def main() -> None:
     # Both need the IME font fix.
     for _cls in ("TEntry", "Entry"):
         root.bind_class(_cls, "<FocusIn>",
-                        lambda e: fix_entry_ime_font(e.widget.winfo_id()),
+                        lambda e: fix_entry_ime_font(e.widget),
                         add="+")
 
     MainWindow(root)
