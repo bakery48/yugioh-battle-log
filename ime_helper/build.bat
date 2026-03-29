@@ -1,64 +1,61 @@
 @echo off
-REM ============================================================
-REM ime_helper.dll ビルドスクリプト
-REM
-REM [方法A] Visual Studio / Build Tools (推奨)
-REM   - "x64 Native Tools Command Prompt for VS 20xx" を開いて実行
-REM   - または vcvars64.bat を事前に呼ぶ
-REM
-REM [方法B] MinGW-w64 が PATH に入っている場合
-REM   - 下の MINGW セクションを有効にする
-REM ============================================================
-
 setlocal
 
 set OUTDIR=%~dp0..
 set SRC=%~dp0ime_helper.cpp
 
-REM --- 方法A: MSVC ---
+echo Building ime_helper.dll ...
+
+REM --- Try MSVC (cl.exe) ---
 where cl >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo [MSVC] Building ime_helper.dll ...
+    echo Using MSVC cl.exe
     cl /nologo /LD /O2 /W3 "%SRC%" ole32.lib ^
        /link /OUT:"%OUTDIR%\ime_helper.dll" /IMPLIB:"%OUTDIR%\ime_helper.lib"
     if %ERRORLEVEL% EQU 0 (
-        echo [OK] ime_helper.dll -> %OUTDIR%
+        echo [OK] ime_helper.dll created.
     ) else (
         echo [FAILED] MSVC build failed.
     )
     goto end
 )
 
-REM --- 方法B: MinGW-w64 ---
+REM --- Try MinGW-w64 ---
 where x86_64-w64-mingw32-g++ >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo [MinGW] Building ime_helper.dll ...
+    echo Using x86_64-w64-mingw32-g++
     x86_64-w64-mingw32-g++ -shared -O2 -o "%OUTDIR%\ime_helper.dll" "%SRC%" ^
         -lole32 -luuid -municode -static-libgcc -static-libstdc++
     if %ERRORLEVEL% EQU 0 (
-        echo [OK] ime_helper.dll -> %OUTDIR%
+        echo [OK] ime_helper.dll created.
     ) else (
         echo [FAILED] MinGW build failed.
     )
     goto end
 )
 
+REM --- Try g++ (MinGW in PATH) ---
 where g++ >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo [g++] Building ime_helper.dll ...
+    echo Using g++
     g++ -shared -O2 -o "%OUTDIR%\ime_helper.dll" "%SRC%" ^
         -lole32 -luuid -static-libgcc -static-libstdc++
     if %ERRORLEVEL% EQU 0 (
-        echo [OK] ime_helper.dll -> %OUTDIR%
+        echo [OK] ime_helper.dll created.
     ) else (
         echo [FAILED] g++ build failed.
     )
     goto end
 )
 
-echo [ERROR] コンパイラが見つかりません。
-echo   Visual Studio Build Tools または MinGW-w64 をインストールしてください。
-echo   https://aka.ms/vs/17/release/vs_BuildTools.exe
+echo [ERROR] No compiler found.
+echo.
+echo Option A: Run this script from "x64 Native Tools Command Prompt for VS 20xx"
+echo           (Start Menu -^> Visual Studio -^> Developer Command Prompt)
+echo.
+echo Option B: Install VS Build Tools (free):
+echo           winget install Microsoft.VisualStudio.2022.BuildTools
+echo           Then open "x64 Native Tools Command Prompt" and re-run.
 exit /b 1
 
 :end
