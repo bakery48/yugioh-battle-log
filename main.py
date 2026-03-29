@@ -11,7 +11,7 @@ import tkinter as tk
 import subprocess
 import database
 from main_window import MainWindow
-from ime_utils import install_ime_hook, get_status, touch_fg_tick, _LOG_PATH
+from ime_utils import install_ime_hook, get_status, touch_fg_tick, fix_entry_ime_font, _LOG_PATH
 
 
 def _git_hash() -> str:
@@ -62,6 +62,13 @@ def main() -> None:
     # our app gains focus.  EVENT_SYSTEM_FOREGROUND does not reliably fire for
     # tkinter windows, so this is the primary way _fg_tick stays current.
     root.bind("<FocusIn>", lambda e: touch_fg_tick(), add="+")
+
+    # Sync the IME composition font with the widget font for every TEntry.
+    # Without this, Windows IME renders pre-confirmation text in the system
+    # default font instead of the app font (Yu Gothic UI), causing a visible
+    # mismatch between confirmed and unconfirmed text.
+    root.bind_class("TEntry", "<FocusIn>",
+                    lambda e: fix_entry_ime_font(e.widget.winfo_id()), add="+")
 
     MainWindow(root)
 
