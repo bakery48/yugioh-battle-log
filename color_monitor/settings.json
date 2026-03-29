@@ -1,0 +1,21 @@
+{
+  "window_title": "NVIDIA GeForce Overlay DT",
+  "start_color": [
+    141,
+    14,
+    22
+  ],
+  "end_color": [
+    83,
+    119,
+    131
+  ],
+  "region": [
+    1233,
+    400,
+    1248,
+    411
+  ],
+  "threshold": 18.78767123287671,
+  "wait_sec": "3"
+}
