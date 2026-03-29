@@ -58,16 +58,18 @@ class DeckTab:
         tree_frame = ttk.Frame(decks_outer)
         tree_frame.pack(fill=tk.BOTH, expand=True)
 
-        columns = ("name", "tags", "weakness")
+        columns = ("name", "tags", "weakness", "strength")
         self.decks_tree = ttk.Treeview(
             tree_frame, columns=columns, show="headings", selectmode="browse"
         )
-        self.decks_tree.heading("name", text="デッキ名")
-        self.decks_tree.heading("tags", text="タグ")
-        self.decks_tree.heading("weakness", text="弱点タグ")
-        self.decks_tree.column("name", width=180)
-        self.decks_tree.column("tags", width=220)
-        self.decks_tree.column("weakness", width=220, stretch=True)
+        self.decks_tree.heading("name",     text="デッキ名")
+        self.decks_tree.heading("tags",     text="タグ")
+        self.decks_tree.heading("weakness", text="弱み")
+        self.decks_tree.heading("strength", text="強み")
+        self.decks_tree.column("name",     width=160)
+        self.decks_tree.column("tags",     width=160)
+        self.decks_tree.column("weakness", width=180)
+        self.decks_tree.column("strength", width=180, stretch=True)
 
         dsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.decks_tree.yview)
         self.decks_tree.configure(yscrollcommand=dsb.set)
@@ -101,12 +103,19 @@ class DeckTab:
         for iid in self.decks_tree.get_children():
             self.decks_tree.delete(iid)
         for deck in self._decks:
-            tag_names = ", ".join(t['name'] for t in deck["tags"])
-            weak_names = ", ".join(t['name'] for t in deck.get("weakness_tags", []))
+            tag_names  = ", ".join(t["name"] for t in deck["tags"])
+            weak_names = ", ".join(t["name"] for t in deck.get("weakness_tags", []))
+            str_names  = ", ".join(t["name"] for t in deck.get("strength_tags", []))
             self.decks_tree.insert(
                 "", tk.END, iid=str(deck["id"]),
-                values=(deck["name"], tag_names, weak_names)
+                values=(deck["name"], tag_names, weak_names, str_names)
             )
+
+    def apply_theme(self, colors: dict) -> None:
+        self.tags_listbox.configure(
+            bg=colors["listbox_bg"], fg=colors["listbox_fg"],
+            selectbackground=colors["select_bg"],
+            selectforeground=colors["select_fg"])
 
     # ── Tag CRUD ──────────────────────────────────────────────────────────────
 
@@ -159,12 +168,14 @@ class DeckTab:
 
     def add_deck(self) -> None:
         dlg = DeckDialog(self.frame, tags=db.get_all_tags(),
-                         weakness_tags=db.get_all_weakness_tags())
+                         weakness_tags=db.get_all_weakness_tags(),
+                         strength_tags=db.get_all_strength_tags())
         self.frame.wait_window(dlg.top)
         if dlg.result:
             try:
                 db.add_deck(dlg.result["name"], dlg.result["tag_ids"],
-                            dlg.result["weakness_tag_names"])
+                            dlg.result["weakness_tag_names"],
+                            dlg.result["strength_tag_names"])
                 self.load_decks()
                 if self.on_deck_changed:
                     self.on_deck_changed()
@@ -183,12 +194,15 @@ class DeckTab:
         if not deck:
             return
         dlg = DeckDialog(self.frame, tags=db.get_all_tags(),
-                         weakness_tags=db.get_all_weakness_tags(), deck=deck)
+                         weakness_tags=db.get_all_weakness_tags(),
+                         strength_tags=db.get_all_strength_tags(),
+                         deck=deck)
         self.frame.wait_window(dlg.top)
         if dlg.result:
             try:
                 db.update_deck(deck_id, dlg.result["name"], dlg.result["tag_ids"],
-                               dlg.result["weakness_tag_names"])
+                               dlg.result["weakness_tag_names"],
+                               dlg.result["strength_tag_names"])
                 self.load_decks()
                 if self.on_deck_changed:
                     self.on_deck_changed()

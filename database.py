@@ -45,6 +45,17 @@ def init_db() -> None:
                 PRIMARY KEY (deck_id, weakness_tag_id)
             );
 
+            CREATE TABLE IF NOT EXISTS strength_tags (
+                id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT    UNIQUE NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS deck_strength_tags (
+                deck_id         INTEGER NOT NULL REFERENCES decks(id)         ON DELETE CASCADE,
+                strength_tag_id INTEGER NOT NULL REFERENCES strength_tags(id) ON DELETE CASCADE,
+                PRIMARY KEY (deck_id, strength_tag_id)
+            );
+
             CREATE TABLE IF NOT EXISTS battles (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 date          TEXT    NOT NULL,
@@ -124,6 +135,14 @@ def get_all_decks() -> list:
                 (deck["id"],),
             ).fetchall()
             deck["weakness_tags"] = [dict(t) for t in weakness_tags]
+            strength_tags = conn.execute(
+                """SELECT st.id, st.name FROM strength_tags st
+                   JOIN deck_strength_tags dst ON st.id = dst.strength_tag_id
+                   WHERE dst.deck_id = ?
+                   ORDER BY st.name""",
+                (deck["id"],),
+            ).fetchall()
+            deck["strength_tags"] = [dict(t) for t in strength_tags]
             result.append(deck)
         return result
     finally:
@@ -144,6 +163,19 @@ def _sync_weakness_tags(conn: sqlite3.Connection, deck_id: int, weakness_tag_nam
         )
 
 
+def _sync_strength_tags(conn: sqlite3.Connection, deck_id: int, strength_tag_names: list) -> None:
+    conn.execute("DELETE FROM deck_strength_tags WHERE deck_id = ?", (deck_id,))
+    for name in strength_tag_names:
+        conn.execute("INSERT OR IGNORE INTO strength_tags (name) VALUES (?)", (name,))
+        st_id = conn.execute(
+            "SELECT id FROM strength_tags WHERE name = ?", (name,)
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT OR IGNORE INTO deck_strength_tags (deck_id, strength_tag_id) VALUES (?, ?)",
+            (deck_id, st_id),
+        )
+
+
 def get_all_weakness_tags() -> list:
     conn = _get_conn()
     try:
@@ -152,8 +184,17 @@ def get_all_weakness_tags() -> list:
         conn.close()
 
 
+def get_all_strength_tags() -> list:
+    conn = _get_conn()
+    try:
+        return [dict(r) for r in conn.execute("SELECT * FROM strength_tags ORDER BY name")]
+    finally:
+        conn.close()
+
+
 def add_deck(name: str, tag_ids: Optional[list] = None,
-             weakness_tag_names: Optional[list] = None) -> int:
+             weakness_tag_names: Optional[list] = None,
+             strength_tag_names: Optional[list] = None) -> int:
     conn = _get_conn()
     try:
         cur = conn.execute("INSERT INTO decks (name) VALUES (?)", (name,))
@@ -163,8 +204,8 @@ def add_deck(name: str, tag_ids: Optional[list] = None,
                 "INSERT INTO deck_tags (deck_id, tag_id) VALUES (?, ?)",
                 [(deck_id, tid) for tid in tag_ids],
             )
-        if weakness_tag_names:
-            _sync_weakness_tags(conn, deck_id, weakness_tag_names)
+        _sync_weakness_tags(conn, deck_id, weakness_tag_names or [])
+        _sync_strength_tags(conn, deck_id, strength_tag_names or [])
         conn.commit()
         return deck_id
     finally:
@@ -172,7 +213,8 @@ def add_deck(name: str, tag_ids: Optional[list] = None,
 
 
 def update_deck(deck_id: int, name: str, tag_ids: Optional[list] = None,
-                weakness_tag_names: Optional[list] = None) -> None:
+                weakness_tag_names: Optional[list] = None,
+                strength_tag_names: Optional[list] = None) -> None:
     conn = _get_conn()
     try:
         conn.execute("UPDATE decks SET name = ? WHERE id = ?", (name, deck_id))
@@ -183,6 +225,7 @@ def update_deck(deck_id: int, name: str, tag_ids: Optional[list] = None,
                 [(deck_id, tid) for tid in tag_ids],
             )
         _sync_weakness_tags(conn, deck_id, weakness_tag_names or [])
+        _sync_strength_tags(conn, deck_id, strength_tag_names or [])
         conn.commit()
     finally:
         conn.close()

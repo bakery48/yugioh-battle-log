@@ -11,11 +11,16 @@ def _pct(num: int, denom: int) -> str:
     return f"{num / denom * 100:.1f}%" if denom > 0 else "—"
 
 
+_LIGHT_STATS_ROWS = ["#f0f4ff", "#f9f9f9", "#fffde7"]
+_DARK_STATS_ROWS  = ["#1e2040", "#2a2a2a", "#2a2510"]
+
+
 class StatsTab:
     def __init__(self, parent: tk.Widget):
         self.frame = ttk.Frame(parent)
         self._decks: list = []
         self._tags: list = []
+        self._colors: dict = {}   # set by apply_theme before calculate() is called
         self._build_ui()
         self.refresh_filter_lists()
 
@@ -143,6 +148,14 @@ class StatsTab:
         for t in self._tags:
             self.tag_listbox.insert(tk.END, t["name"])
 
+    def apply_theme(self, colors: dict) -> None:
+        self._colors = colors
+        lb_cfg = dict(bg=colors["listbox_bg"], fg=colors["listbox_fg"],
+                      selectbackground=colors["select_bg"],
+                      selectforeground=colors["select_fg"])
+        self.deck_listbox.configure(**lb_cfg)
+        self.tag_listbox.configure(**lb_cfg)
+
     def reset(self) -> None:
         self.date_from_var.set("")
         self.date_to_var.set("")
@@ -230,7 +243,8 @@ class StatsTab:
             ),
         ]
 
-        row_colors = ["#f0f4ff", "#f9f9f9", "#fffde7"]
+        row_colors = (self._colors.get("stats_rows") or _LIGHT_STATS_ROWS)
+        fg = self._colors.get("stats_fg", "black")
         for r, (row_data, bg) in enumerate(zip(rows, row_colors), start=1):
             for c, val in enumerate(row_data):
                 tk.Label(
@@ -239,6 +253,7 @@ class StatsTab:
                     width=col_widths[c],
                     anchor=tk.CENTER,
                     background=bg,
+                    foreground=fg,
                     relief="groove",
                     padx=4,
                     pady=4,

@@ -157,6 +157,10 @@ class BattleTab:
             text=f"{total} 件  （{wins}勝 {total - wins}敗）"
         )
 
+    def apply_theme(self, colors: dict) -> None:
+        self.tree.tag_configure("win",  background=colors["tree_win"])
+        self.tree.tag_configure("loss", background=colors["tree_loss"])
+
     def reset_filters(self) -> None:
         self.date_from_var.set("")
         self.date_to_var.set("")
