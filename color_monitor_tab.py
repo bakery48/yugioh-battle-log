@@ -59,6 +59,20 @@ def _rgb_to_hex(rgb):
     return "#{:02x}{:02x}{:02x}".format(*rgb)
 
 
+def _virtual_screen_rect():
+    """全モニターを包む仮想スクリーンの (x, y, width, height) を返す。"""
+    try:
+        import ctypes
+        u32 = ctypes.windll.user32
+        x = u32.GetSystemMetrics(76)   # SM_XVIRTUALSCREEN
+        y = u32.GetSystemMetrics(77)   # SM_YVIRTUALSCREEN
+        w = u32.GetSystemMetrics(78)   # SM_CXVIRTUALSCREEN
+        h = u32.GetSystemMetrics(79)   # SM_CYVIRTUALSCREEN
+        return x, y, w, h
+    except Exception:
+        return 0, 0, 1920, 1080
+
+
 def _get_all_windows():
     result = []
     def cb(hwnd, _):
@@ -88,12 +102,17 @@ class _RegionSelector:
         self.start_x = self.start_y = 0
         self.rect_id = None
 
+        vx, vy, vw, vh = _virtual_screen_rect()
+        self._vx = vx   # canvas座標 → スクリーン絶対座標へのオフセット
+        self._vy = vy
+
         self.win = tk.Toplevel(root)
-        self.win.attributes("-fullscreen", True)
+        # -fullscreen はプライマリモニターのみ。全モニターをカバーするため geometry を直接指定
+        self.win.overrideredirect(True)
         self.win.attributes("-alpha", 0.35)
         self.win.attributes("-topmost", True)
-        self.win.overrideredirect(True)
         self.win.configure(bg="black")
+        self.win.geometry(f"{vw}x{vh}+{vx}+{vy}")
 
         self.canvas = tk.Canvas(self.win, cursor="cross", bg="black",
                                 highlightthickness=0)
@@ -125,7 +144,9 @@ class _RegionSelector:
         x2, y2 = max(self.start_x, e.x), max(self.start_y, e.y)
         self.win.destroy()
         if x2 - x1 > 3 and y2 - y1 > 3:
-            self.callback((x1, y1, x2, y2))
+            # canvas座標はウィンドウ左上相対なので、仮想スクリーン原点を加算して絶対座標へ
+            self.callback((x1 + self._vx, y1 + self._vy,
+                           x2 + self._vx, y2 + self._vy))
 
 
 # ─── ColorPickerOverlay ───────────────────────────────────────────────────────
@@ -133,12 +154,13 @@ class _RegionSelector:
 class _ColorPickerOverlay:
     def __init__(self, root, callback):
         self.callback = callback
+        vx, vy, vw, vh = _virtual_screen_rect()
         self.win = tk.Toplevel(root)
-        self.win.attributes("-fullscreen", True)
+        self.win.overrideredirect(True)
         self.win.attributes("-alpha", 0.01)
         self.win.attributes("-topmost", True)
-        self.win.overrideredirect(True)
         self.win.configure(cursor="crosshair")
+        self.win.geometry(f"{vw}x{vh}+{vx}+{vy}")
         self.win.bind("<ButtonPress-1>", self._on_click)
         self.win.bind("<Escape>", lambda e: self.win.destroy())
 
