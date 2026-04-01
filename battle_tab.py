@@ -17,6 +17,8 @@ class BattleTab:
         self.frame = ctk.CTkFrame(parent, fg_color="transparent")
         self.frame.pack(fill="both", expand=True)
         self._battles: list = []
+        self._last_rank: str = "D1"
+        self._last_deck_name: str = ""
         self._build_ui()
         self.load_battles()
 
@@ -192,10 +194,17 @@ class BattleTab:
                 parent=self.frame,
             )
             return
-        dlg = BattleDialog(self.frame, decks=decks)
+        dlg = BattleDialog(self.frame, decks=decks,
+                           last_rank=self._last_rank,
+                           last_deck_name=self._last_deck_name)
         self.frame.wait_window(dlg.top)
         if dlg.result:
             db.add_battle(**dlg.result)
+            self._last_rank = dlg.result["rank"]
+            # deck_id → name for next default
+            deck = next((d for d in decks if d["id"] == dlg.result["deck_id"]), None)
+            if deck:
+                self._last_deck_name = deck["name"]
             self.load_battles()
 
     def edit_battle(self) -> None:

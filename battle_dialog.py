@@ -18,9 +18,13 @@ class BattleDialog:
     """Modal dialog that returns a result dict on save, or None on cancel."""
 
     def __init__(self, parent: tk.Widget, decks: list,
-                 battle: Optional[dict] = None):
+                 battle: Optional[dict] = None,
+                 last_rank: str = "D1",
+                 last_deck_name: str = ""):
         self.result: Optional[dict] = None
         self.decks = decks
+        self._last_rank = last_rank
+        self._last_deck_name = last_deck_name
 
         self.top = ctk.CTkToplevel(parent)
         self.top.title("戦績を追加" if battle is None else "戦績を編集")
@@ -58,7 +62,7 @@ class BattleDialog:
 
         # ── Rank ──────────────────────────────────────────────────────────────
         lbl(1, "ランク *")
-        self.rank_var = tk.StringVar(value=battle["rank"] if battle else "D1")
+        self.rank_var = tk.StringVar(value=battle["rank"] if battle else self._last_rank)
         ctk.CTkOptionMenu(frame, variable=self.rank_var, values=RANKS,
                           width=90, font=_FONT,
                           dropdown_font=_FONT).grid(
@@ -101,8 +105,12 @@ class BattleDialog:
         # ── Deck ──────────────────────────────────────────────────────────────
         lbl(5, "使用デッキ *")
         deck_names = [d["name"] for d in self.decks]
-        init_deck = (battle["deck_name"] if battle and battle.get("deck_name")
-                     else (deck_names[0] if deck_names else ""))
+        if battle and battle.get("deck_name"):
+            init_deck = battle["deck_name"]
+        elif self._last_deck_name and self._last_deck_name in deck_names:
+            init_deck = self._last_deck_name
+        else:
+            init_deck = deck_names[0] if deck_names else ""
         self.deck_var = tk.StringVar(value=init_deck)
         ctk.CTkOptionMenu(frame, variable=self.deck_var, values=deck_names,
                           width=260, font=_FONT,
