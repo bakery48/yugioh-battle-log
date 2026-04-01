@@ -93,7 +93,8 @@ class BattleDialog:
         self.defeat_reason_var = tk.StringVar(
             value=battle["defeat_reason"] if battle else "")
         self.defeat_reason_entry = ctk.CTkEntry(
-            frame, textvariable=self.defeat_reason_var, width=300, font=_FONT)
+            frame, textvariable=self.defeat_reason_var, width=300, font=_FONT,
+            placeholder_text="敗北時のみ入力")
         self.defeat_reason_entry.grid(row=4, column=1, columnspan=2,
                                       sticky="w", padx=px, pady=py)
 
@@ -136,11 +137,10 @@ class BattleDialog:
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
     def _on_result_changed(self) -> None:
+        # CTkEntry の disabled/normal 切り替えはフォーカスを失うことがある。
+        # 代わりに常に enabled のまま、勝利選択時はテキストをクリアするだけにする。
         if self.result_var.get() == "勝利":
-            self.defeat_reason_entry.configure(state="disabled")
             self.defeat_reason_var.set("")
-        else:
-            self.defeat_reason_entry.configure(state="normal")
 
     def _save(self) -> None:
         date         = self.date_var.get().strip()
