@@ -7,6 +7,21 @@ from typing import Optional
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "battle_log.db")
 
 
+def _ja_key(s: str) -> str:
+    """五十音ソート用キー。カタカナ→ひらがな変換・小文字化で統一比較。"""
+    buf = []
+    for c in s.lower():
+        cp = ord(c)
+        # 全角カタカナ (U+30A1–U+30F6) → 対応するひらがなにずらす
+        buf.append(chr(cp - 0x60) if 0x30A1 <= cp <= 0x30F6 else c)
+    return "".join(buf)
+
+
+def _sort_names(rows: list) -> list:
+    """name キーを持つ dict のリストを五十音順にソートして返す。"""
+    return sorted(rows, key=lambda r: _ja_key(r["name"]))
+
+
 def _get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -77,7 +92,7 @@ def init_db() -> None:
 def get_all_tags() -> list:
     conn = _get_conn()
     try:
-        return [dict(r) for r in conn.execute("SELECT * FROM tags ORDER BY name")]
+        return _sort_names([dict(r) for r in conn.execute("SELECT * FROM tags")])
     finally:
         conn.close()
 
@@ -115,36 +130,33 @@ def delete_tag(tag_id: int) -> None:
 def get_all_decks() -> list:
     conn = _get_conn()
     try:
-        rows = conn.execute("SELECT * FROM decks ORDER BY name").fetchall()
+        rows = conn.execute("SELECT * FROM decks").fetchall()
         result = []
         for row in rows:
             deck = dict(row)
             tags = conn.execute(
                 """SELECT t.id, t.name FROM tags t
                    JOIN deck_tags dt ON t.id = dt.tag_id
-                   WHERE dt.deck_id = ?
-                   ORDER BY t.name""",
+                   WHERE dt.deck_id = ?""",
                 (deck["id"],),
             ).fetchall()
-            deck["tags"] = [dict(t) for t in tags]
+            deck["tags"] = _sort_names([dict(t) for t in tags])
             weakness_tags = conn.execute(
                 """SELECT wt.id, wt.name FROM weakness_tags wt
                    JOIN deck_weakness_tags dwt ON wt.id = dwt.weakness_tag_id
-                   WHERE dwt.deck_id = ?
-                   ORDER BY wt.name""",
+                   WHERE dwt.deck_id = ?""",
                 (deck["id"],),
             ).fetchall()
-            deck["weakness_tags"] = [dict(t) for t in weakness_tags]
+            deck["weakness_tags"] = _sort_names([dict(t) for t in weakness_tags])
             strength_tags = conn.execute(
                 """SELECT st.id, st.name FROM strength_tags st
                    JOIN deck_strength_tags dst ON st.id = dst.strength_tag_id
-                   WHERE dst.deck_id = ?
-                   ORDER BY st.name""",
+                   WHERE dst.deck_id = ?""",
                 (deck["id"],),
             ).fetchall()
-            deck["strength_tags"] = [dict(t) for t in strength_tags]
+            deck["strength_tags"] = _sort_names([dict(t) for t in strength_tags])
             result.append(deck)
-        return result
+        return _sort_names(result)
     finally:
         conn.close()
 
@@ -179,7 +191,7 @@ def _sync_strength_tags(conn: sqlite3.Connection, deck_id: int, strength_tag_nam
 def get_all_weakness_tags() -> list:
     conn = _get_conn()
     try:
-        return [dict(r) for r in conn.execute("SELECT * FROM weakness_tags ORDER BY name")]
+        return _sort_names([dict(r) for r in conn.execute("SELECT * FROM weakness_tags")])
     finally:
         conn.close()
 
@@ -187,7 +199,7 @@ def get_all_weakness_tags() -> list:
 def get_all_strength_tags() -> list:
     conn = _get_conn()
     try:
-        return [dict(r) for r in conn.execute("SELECT * FROM strength_tags ORDER BY name")]
+        return _sort_names([dict(r) for r in conn.execute("SELECT * FROM strength_tags")])
     finally:
         conn.close()
 
