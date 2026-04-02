@@ -163,9 +163,15 @@ class ChartTab:
         if others_count > 0:
             main[OTHERS_LABEL] = others_count
 
-        sorted_items = sorted(main.items(), key=lambda x: x[1], reverse=True)
-        labels = [item[0] for item in sorted_items]
-        sizes  = [item[1] for item in sorted_items]
+        # その他以外を多い順、その他は末尾に固定
+        named = sorted(
+            ((k, v) for k, v in main.items() if k != OTHERS_LABEL),
+            key=lambda x: x[1], reverse=True,
+        )
+        if others_count > 0:
+            named.append((OTHERS_LABEL, others_count))
+        labels = [item[0] for item in named]
+        sizes  = [item[1] for item in named]
 
         cmap   = plt.get_cmap("tab20")
         colors = [cmap(i / max(len(labels), 1)) for i in range(len(labels))]
