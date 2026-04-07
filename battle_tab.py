@@ -1,5 +1,7 @@
 """Battle records tab."""
 
+import json
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 import customtkinter as ctk
@@ -11,14 +13,34 @@ from constants import RANKS
 _FONT      = ("Meiryo", 10)
 _FONT_BOLD = ("Meiryo", 10, "bold")
 
+_PREFS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "battle_prefs.json")
+
+
+def _load_prefs() -> dict:
+    try:
+        with open(_PREFS_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_prefs(prefs: dict) -> None:
+    try:
+        with open(_PREFS_FILE, "w", encoding="utf-8") as f:
+            json.dump(prefs, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
 
 class BattleTab:
     def __init__(self, parent: tk.Widget):
         self.frame = ctk.CTkFrame(parent, fg_color="transparent")
         self.frame.pack(fill="both", expand=True)
         self._battles: list = []
-        self._last_rank: str = "D1"
-        self._last_deck_name: str = ""
+        prefs = _load_prefs()
+        self._last_rank: str      = prefs.get("last_rank", "D1")
+        self._last_deck_name: str = prefs.get("last_deck_name", "")
         self._build_ui()
         self.load_battles()
 
@@ -201,10 +223,11 @@ class BattleTab:
         if dlg.result:
             db.add_battle(**dlg.result)
             self._last_rank = dlg.result["rank"]
-            # deck_id → name for next default
             deck = next((d for d in decks if d["id"] == dlg.result["deck_id"]), None)
             if deck:
                 self._last_deck_name = deck["name"]
+            _save_prefs({"last_rank": self._last_rank,
+                         "last_deck_name": self._last_deck_name})
             self.load_battles()
 
     def edit_battle(self) -> None:
