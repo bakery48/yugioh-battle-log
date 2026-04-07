@@ -8,6 +8,7 @@ from battle_tab import BattleTab
 from deck_tab import DeckTab
 from stats_tab import StatsTab
 from chart_tab import ChartTab
+from matchup_tab import MatchupTab
 from color_monitor_tab import ColorMonitorTab
 
 _TREE_LIGHT = {
@@ -61,13 +62,14 @@ class MainWindow:
         except Exception:
             pass
 
-        for name in ("戦績一覧", "デッキ管理", "統計", "デッキ分布", "色変化監視"):
+        for name in ("戦績一覧", "デッキ管理", "統計", "相手別勝率", "デッキ分布", "色変化監視"):
             self.tabview.add(name)
 
         self.battle_tab        = BattleTab(self.tabview.tab("戦績一覧"))
         self.deck_tab          = DeckTab(self.tabview.tab("デッキ管理"),
                                          on_deck_changed=self._on_deck_changed)
         self.stats_tab         = StatsTab(self.tabview.tab("統計"))
+        self.matchup_tab       = MatchupTab(self.tabview.tab("相手別勝率"))
         self.chart_tab         = ChartTab(self.tabview.tab("デッキ分布"))
         self.color_monitor_tab = ColorMonitorTab(self.tabview.tab("色変化監視"))
 
