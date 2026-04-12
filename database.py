@@ -301,6 +301,46 @@ def get_battles(filters: Optional[dict] = None) -> list:
         conn.close()
 
 
+def get_distinct_opponent_decks() -> list:
+    """戦績に登場する相手デッキ名を五十音順で返す。"""
+    conn = _get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT opponent_deck FROM battles WHERE opponent_deck != ''"
+        ).fetchall()
+        return sorted([r[0] for r in rows], key=_ja_key)
+    finally:
+        conn.close()
+
+
+def replace_opponent_deck(old_name: str, new_name: str) -> int:
+    """相手デッキ名を一括置換する。更新件数を返す。"""
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            "UPDATE battles SET opponent_deck = ? WHERE opponent_deck = ?",
+            (new_name, old_name),
+        )
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
+def replace_battle_deck(old_deck_id: int, new_deck_id: int) -> int:
+    """戦績の使用デッキを一括置換する。更新件数を返す。"""
+    conn = _get_conn()
+    try:
+        cur = conn.execute(
+            "UPDATE battles SET deck_id = ? WHERE deck_id = ?",
+            (new_deck_id, old_deck_id),
+        )
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def add_battle(
     date: str,
     rank: str,

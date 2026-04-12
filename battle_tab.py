@@ -136,6 +136,8 @@ class BattleTab:
                       width=60, font=_FONT).pack(side="right", padx=4)
         ctk.CTkButton(bottom, text="＋ 追加", command=self.add_battle,
                       width=80, font=_FONT).pack(side="right", padx=4)
+        ctk.CTkButton(bottom, text="一括置換", command=self._open_replace_dialog,
+                      width=76, font=_FONT).pack(side="right", padx=4)
 
         self._sort_col: str = "date"
         self._sort_rev: bool = True
@@ -256,3 +258,158 @@ class BattleTab:
         ):
             db.delete_battle(battle["id"])
             self.load_battles()
+
+    def _open_replace_dialog(self) -> None:
+        dlg = _ReplaceDialog(self.frame)
+        self.frame.wait_window(dlg.top)
+        if dlg.changed:
+            self.load_battles()
+
+
+# ── 一括置換ダイアログ ────────────────────────────────────────────────────────
+
+class _ReplaceDialog:
+    """使用デッキ・相手デッキを戦績全体で一括置換するダイアログ。"""
+
+    def __init__(self, parent: tk.Widget):
+        self.changed = False
+
+        self.top = ctk.CTkToplevel(parent)
+        self.top.title("デッキ名一括置換")
+        self.top.resizable(False, False)
+        self.top.grab_set()
+        self.top.focus_set()
+
+        self._build_ui()
+
+        self.top.update_idletasks()
+        px = parent.winfo_rootx() + (parent.winfo_width()  - self.top.winfo_width())  // 2
+        py = parent.winfo_rooty() + (parent.winfo_height() - self.top.winfo_height()) // 2
+        self.top.geometry(f"+{max(px, 0)}+{max(py, 0)}")
+
+    def _build_ui(self) -> None:
+        outer = ctk.CTkFrame(self.top, fg_color="transparent")
+        outer.pack(padx=20, pady=15, fill="both", expand=True)
+
+        # ── 相手デッキ ─────────────────────────────────────────────────────────
+        opp_section = ctk.CTkFrame(outer, border_width=1)
+        opp_section.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(opp_section, text="相手デッキ", font=_FONT_BOLD).pack(
+            anchor="w", padx=8, pady=(6, 4))
+
+        opp_inner = ctk.CTkFrame(opp_section, fg_color="transparent")
+        opp_inner.pack(fill="x", padx=10, pady=(0, 10))
+
+        opp_names = db.get_distinct_opponent_decks()
+
+        ctk.CTkLabel(opp_inner, text="置換前:", font=_FONT).grid(
+            row=0, column=0, sticky="e", padx=(0, 6), pady=4)
+        self._opp_old = ctk.CTkComboBox(opp_inner, values=opp_names,
+                                         width=220, font=_FONT,
+                                         dropdown_font=_FONT)
+        self._opp_old.grid(row=0, column=1, padx=(0, 10))
+        if opp_names:
+            self._opp_old.set(opp_names[0])
+
+        ctk.CTkLabel(opp_inner, text="置換後:", font=_FONT).grid(
+            row=1, column=0, sticky="e", padx=(0, 6), pady=4)
+        self._opp_new = ctk.CTkComboBox(opp_inner, values=opp_names,
+                                         width=220, font=_FONT,
+                                         dropdown_font=_FONT)
+        self._opp_new.grid(row=1, column=1, padx=(0, 10))
+
+        ctk.CTkButton(opp_inner, text="置換実行", width=80, font=_FONT,
+                      command=self._replace_opp).grid(
+            row=0, column=2, rowspan=2, padx=(0, 4))
+
+        # ── 使用デッキ ─────────────────────────────────────────────────────────
+        own_section = ctk.CTkFrame(outer, border_width=1)
+        own_section.pack(fill="x", pady=(0, 10))
+        ctk.CTkLabel(own_section, text="使用デッキ", font=_FONT_BOLD).pack(
+            anchor="w", padx=8, pady=(6, 4))
+
+        own_inner = ctk.CTkFrame(own_section, fg_color="transparent")
+        own_inner.pack(fill="x", padx=10, pady=(0, 10))
+
+        decks = db.get_all_decks()
+        deck_names = [d["name"] for d in decks]
+        self._decks = decks
+
+        ctk.CTkLabel(own_inner, text="置換前:", font=_FONT).grid(
+            row=0, column=0, sticky="e", padx=(0, 6), pady=4)
+        self._own_old_var = tk.StringVar(value=deck_names[0] if deck_names else "")
+        self._own_old_menu = ctk.CTkOptionMenu(
+            own_inner, variable=self._own_old_var,
+            values=deck_names or ["（デッキなし）"],
+            width=220, font=_FONT, dropdown_font=_FONT)
+        self._own_old_menu.grid(row=0, column=1, padx=(0, 10))
+
+        ctk.CTkLabel(own_inner, text="置換後:", font=_FONT).grid(
+            row=1, column=0, sticky="e", padx=(0, 6), pady=4)
+        self._own_new_var = tk.StringVar(value=deck_names[0] if deck_names else "")
+        self._own_new_menu = ctk.CTkOptionMenu(
+            own_inner, variable=self._own_new_var,
+            values=deck_names or ["（デッキなし）"],
+            width=220, font=_FONT, dropdown_font=_FONT)
+        self._own_new_menu.grid(row=1, column=1, padx=(0, 10))
+
+        ctk.CTkButton(own_inner, text="置換実行", width=80, font=_FONT,
+                      command=self._replace_own).grid(
+            row=0, column=2, rowspan=2, padx=(0, 4))
+
+        # ── 閉じる ─────────────────────────────────────────────────────────────
+        ctk.CTkButton(outer, text="閉じる", command=self.top.destroy,
+                      width=100, font=_FONT).pack(pady=(4, 0))
+
+        self.top.bind("<Escape>", lambda _: self.top.destroy())
+
+    # ── 実行 ──────────────────────────────────────────────────────────────────
+
+    def _replace_opp(self) -> None:
+        old = self._opp_old.get().strip()
+        new = self._opp_new.get().strip()
+        if not old:
+            messagebox.showwarning("入力エラー", "置換前のデッキ名を入力してください。",
+                                   parent=self.top)
+            return
+        if not new:
+            messagebox.showwarning("入力エラー", "置換後のデッキ名を入力してください。",
+                                   parent=self.top)
+            return
+        if old == new:
+            messagebox.showinfo("変更なし", "置換前後が同じです。", parent=self.top)
+            return
+        n = db.replace_opponent_deck(old, new)
+        if n == 0:
+            messagebox.showinfo("結果", f"「{old}」に一致する相手デッキがありません。",
+                                parent=self.top)
+        else:
+            messagebox.showinfo("完了", f"{n} 件の相手デッキを「{new}」に置換しました。",
+                                parent=self.top)
+            self.changed = True
+            # ドロップダウンを更新
+            updated = db.get_distinct_opponent_decks()
+            self._opp_old.configure(values=updated)
+            self._opp_new.configure(values=updated)
+
+    def _replace_own(self) -> None:
+        old_name = self._own_old_var.get()
+        new_name = self._own_new_var.get()
+        if old_name == new_name:
+            messagebox.showinfo("変更なし", "置換前後が同じです。", parent=self.top)
+            return
+        old_deck = next((d for d in self._decks if d["name"] == old_name), None)
+        new_deck = next((d for d in self._decks if d["name"] == new_name), None)
+        if not old_deck or not new_deck:
+            messagebox.showwarning("エラー", "デッキが見つかりません。", parent=self.top)
+            return
+        n = db.replace_battle_deck(old_deck["id"], new_deck["id"])
+        if n == 0:
+            messagebox.showinfo("結果",
+                                f"「{old_name}」を使用した戦績がありません。",
+                                parent=self.top)
+        else:
+            messagebox.showinfo("完了",
+                                f"{n} 件の使用デッキを「{new_name}」に置換しました。",
+                                parent=self.top)
+            self.changed = True
