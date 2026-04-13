@@ -21,7 +21,7 @@ class DeckDialog:
         self.weakness_tags = weakness_tags or []
         self.strength_tags = strength_tags or []
 
-        self.top = ctk.CTkToplevel(parent)
+        self.top = tk.Toplevel(parent)
         self.top.title("デッキを追加" if deck is None else "デッキを編集")
         self.top.resizable(False, False)
         self.top.grab_set()

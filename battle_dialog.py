@@ -26,7 +26,7 @@ class BattleDialog:
         self._last_rank = last_rank
         self._last_deck_name = last_deck_name
 
-        self.top = ctk.CTkToplevel(parent)
+        self.top = tk.Toplevel(parent)
         self.top.title("戦績を追加" if battle is None else "戦績を編集")
         self.top.resizable(False, False)
         self.top.grab_set()

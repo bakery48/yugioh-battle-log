@@ -274,7 +274,7 @@ class _ReplaceDialog:
     def __init__(self, parent: tk.Widget):
         self.changed = False
 
-        self.top = ctk.CTkToplevel(parent)
+        self.top = tk.Toplevel(parent)
         self.top.title("デッキ名一括置換")
         self.top.resizable(False, False)
         self.top.grab_set()
