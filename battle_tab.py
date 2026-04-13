@@ -263,7 +263,23 @@ class BattleTab:
         self.frame.wait_window(dlg.top)
         if dlg.result:
             db.update_battle(battle["id"], **dlg.result)
-            self.load_battles()
+            r = dlg.result
+            deck = next((d for d in decks if d["id"] == r["deck_id"]), None)
+            deck_name = deck["name"] if deck else "（削除済み）"
+            # self._battles をインプレース更新
+            for i, b in enumerate(self._battles):
+                if b["id"] == battle["id"]:
+                    self._battles[i] = {**r, "id": battle["id"],
+                                        "deck_name": deck_name}
+                    break
+            # ツリー行をインプレース更新（全件再読み込み不要）
+            iid = str(battle["id"])
+            self.tree.item(iid, values=(
+                r["date"], r["rank"], r["first_second"], r["result"],
+                deck_name, r["opponent_deck"], r["defeat_reason"] or ""))
+            self.tree.item(iid, tags=(
+                "win" if r["result"] == "勝利" else "loss",))
+            self._update_count_label()
 
     def delete_battle(self) -> None:
         battle = self._selected_battle()
@@ -277,7 +293,9 @@ class BattleTab:
             parent=self.frame,
         ):
             db.delete_battle(battle["id"])
-            self.load_battles()
+            self._battles = [b for b in self._battles if b["id"] != battle["id"]]
+            self.tree.delete(str(battle["id"]))
+            self._update_count_label()
 
     def _open_replace_dialog(self) -> None:
         dlg = _ReplaceDialog(self.frame)

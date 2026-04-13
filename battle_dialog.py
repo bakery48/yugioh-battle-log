@@ -185,4 +185,5 @@ class BattleDialog:
             "deck_id": deck_id,
             "opponent_deck": opponent_deck,
         }
+        self.top.withdraw()
         self.top.destroy()

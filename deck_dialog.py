@@ -182,4 +182,5 @@ class DeckDialog:
             "weakness_tag_names": [n for n, v in self._wtag_vars.items() if v.get()],
             "strength_tag_names": [n for n, v in self._stag_vars.items() if v.get()],
         }
+        self.top.withdraw()
         self.top.destroy()
