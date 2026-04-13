@@ -275,6 +275,7 @@ class _ReplaceDialog:
         self.changed = False
 
         self.top = tk.Toplevel(parent)
+        self.top.withdraw()
         self.top.title("デッキ名一括置換")
         self.top.resizable(False, False)
         self.top.grab_set()
@@ -286,6 +287,7 @@ class _ReplaceDialog:
         px = parent.winfo_rootx() + (parent.winfo_width()  - self.top.winfo_width())  // 2
         py = parent.winfo_rooty() + (parent.winfo_height() - self.top.winfo_height()) // 2
         self.top.geometry(f"+{max(px, 0)}+{max(py, 0)}")
+        self.top.deiconify()
 
     def _build_ui(self) -> None:
         outer = ctk.CTkFrame(self.top, fg_color="transparent")

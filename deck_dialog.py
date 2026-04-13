@@ -22,6 +22,7 @@ class DeckDialog:
         self.strength_tags = strength_tags or []
 
         self.top = tk.Toplevel(parent)
+        self.top.withdraw()
         self.top.title("デッキを追加" if deck is None else "デッキを編集")
         self.top.resizable(False, False)
         self.top.grab_set()
@@ -33,6 +34,7 @@ class DeckDialog:
         px = parent.winfo_rootx() + (parent.winfo_width()  - self.top.winfo_width())  // 2
         py = parent.winfo_rooty() + (parent.winfo_height() - self.top.winfo_height()) // 2
         self.top.geometry(f"+{max(px, 0)}+{max(py, 0)}")
+        self.top.deiconify()
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
