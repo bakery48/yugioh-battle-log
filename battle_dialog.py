@@ -2,10 +2,9 @@
 
 import re
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 from datetime import date as dt_date
 from typing import Optional
-import customtkinter as ctk
 
 from constants import RANKS, FIRST_SECOND_OPTIONS, RESULT_OPTIONS
 
@@ -44,63 +43,61 @@ class BattleDialog:
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self, battle: Optional[dict]) -> None:
-        frame = ctk.CTkFrame(self.top, fg_color="transparent")
-        frame.pack(padx=20, pady=15)
+        frame = ttk.Frame(self.top, padding=(20, 15))
+        frame.pack(fill="both", expand=True)
 
         px, py = 12, 6
 
         def lbl(row, text):
-            ctk.CTkLabel(frame, text=text, font=_FONT_BOLD).grid(
+            ttk.Label(frame, text=text, font=_FONT_BOLD).grid(
                 row=row, column=0, sticky="e", padx=(0, px), pady=py)
 
         # ── Date ──────────────────────────────────────────────────────────────
         lbl(0, "日付 *")
         self.date_var = tk.StringVar(
             value=battle["date"] if battle else dt_date.today().isoformat())
-        ctk.CTkEntry(frame, textvariable=self.date_var, width=120,
-                     font=_FONT).grid(row=0, column=1, sticky="w", padx=px, pady=py)
-        ctk.CTkLabel(frame, text="YYYY-MM-DD", text_color="gray",
-                     font=_FONT_SM).grid(row=0, column=2, sticky="w")
+        ttk.Entry(frame, textvariable=self.date_var, width=14,
+                  font=_FONT).grid(row=0, column=1, sticky="w", padx=px, pady=py)
+        ttk.Label(frame, text="YYYY-MM-DD", foreground="gray",
+                  font=_FONT_SM).grid(row=0, column=2, sticky="w")
 
         # ── Rank ──────────────────────────────────────────────────────────────
         lbl(1, "ランク *")
-        self.rank_var = tk.StringVar(value=battle["rank"] if battle else self._last_rank)
-        ctk.CTkOptionMenu(frame, variable=self.rank_var, values=RANKS,
-                          width=90, font=_FONT,
-                          dropdown_font=_FONT).grid(
+        self.rank_var = tk.StringVar(
+            value=battle["rank"] if battle else self._last_rank)
+        ttk.Combobox(frame, textvariable=self.rank_var, values=RANKS,
+                     width=8, font=_FONT, state="readonly").grid(
             row=1, column=1, sticky="w", padx=px, pady=py)
 
         # ── First / Second ────────────────────────────────────────────────────
         lbl(2, "先攻/後攻 *")
         self.fs_var = tk.StringVar(
             value=battle["first_second"] if battle else "先攻")
-        fs_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        fs_frame = ttk.Frame(frame)
         fs_frame.grid(row=2, column=1, columnspan=2, sticky="w", padx=px, pady=py)
         for opt in FIRST_SECOND_OPTIONS:
-            ctk.CTkRadioButton(fs_frame, text=opt, variable=self.fs_var,
-                               value=opt, font=_FONT).pack(side="left", padx=8)
+            ttk.Radiobutton(fs_frame, text=opt, variable=self.fs_var,
+                            value=opt).pack(side="left", padx=8)
 
         # ── Result ────────────────────────────────────────────────────────────
         lbl(3, "結果 *")
         self.result_var = tk.StringVar(
             value=battle["result"] if battle else "勝利")
-        result_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        result_frame = ttk.Frame(frame)
         result_frame.grid(row=3, column=1, columnspan=2, sticky="w",
                           padx=px, pady=py)
         for opt in RESULT_OPTIONS:
-            ctk.CTkRadioButton(
+            ttk.Radiobutton(
                 result_frame, text=opt, variable=self.result_var,
-                value=opt, font=_FONT,
-                command=self._on_result_changed,
+                value=opt, command=self._on_result_changed,
             ).pack(side="left", padx=8)
 
         # ── Defeat reason ─────────────────────────────────────────────────────
         lbl(4, "敗因")
         self.defeat_reason_var = tk.StringVar(
             value=battle["defeat_reason"] if battle else "")
-        self.defeat_reason_entry = ctk.CTkEntry(
-            frame, textvariable=self.defeat_reason_var, width=300, font=_FONT,
-            placeholder_text="敗北時のみ入力")
+        self.defeat_reason_entry = ttk.Entry(
+            frame, textvariable=self.defeat_reason_var, width=35, font=_FONT)
         self.defeat_reason_entry.grid(row=4, column=1, columnspan=2,
                                       sticky="w", padx=px, pady=py)
 
@@ -114,31 +111,29 @@ class BattleDialog:
         else:
             init_deck = deck_names[0] if deck_names else ""
         self.deck_var = tk.StringVar(value=init_deck)
-        ctk.CTkOptionMenu(frame, variable=self.deck_var, values=deck_names,
-                          width=260, font=_FONT,
-                          dropdown_font=_FONT).grid(
+        ttk.Combobox(frame, textvariable=self.deck_var, values=deck_names,
+                     width=30, font=_FONT, state="readonly").grid(
             row=5, column=1, columnspan=2, sticky="w", padx=px, pady=py)
 
         # ── Opponent deck ─────────────────────────────────────────────────────
         lbl(6, "相手デッキ *")
         self.opponent_deck_var = tk.StringVar(
             value=battle["opponent_deck"] if battle else "")
-        self._opp_combo = ctk.CTkComboBox(
-            frame, variable=self.opponent_deck_var,
-            values=deck_names, width=280, font=_FONT,
-            dropdown_font=_FONT)
+        self._opp_combo = ttk.Combobox(
+            frame, textvariable=self.opponent_deck_var,
+            values=deck_names, width=32, font=_FONT)
         self._opp_combo.grid(row=6, column=1, columnspan=2, sticky="w",
                              padx=px, pady=py)
         if battle and battle.get("opponent_deck"):
             self._opp_combo.set(battle["opponent_deck"])
 
         # ── Buttons ───────────────────────────────────────────────────────────
-        btn_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=7, column=0, columnspan=3, pady=(12, 0))
-        ctk.CTkButton(btn_frame, text="保存", command=self._save,
-                      width=100, font=_FONT).pack(side="left", padx=8)
-        ctk.CTkButton(btn_frame, text="キャンセル", command=self.top.destroy,
-                      width=100, font=_FONT).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="保存", command=self._save,
+                   width=10).pack(side="left", padx=8)
+        ttk.Button(btn_frame, text="キャンセル", command=self.top.destroy,
+                   width=10).pack(side="left", padx=8)
 
         self._on_result_changed()
         self.top.bind("<Return>", lambda _: self._save())
@@ -147,18 +142,16 @@ class BattleDialog:
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
     def _on_result_changed(self) -> None:
-        # CTkEntry の disabled/normal 切り替えはフォーカスを失うことがある。
-        # 代わりに常に enabled のまま、勝利選択時はテキストをクリアするだけにする。
         if self.result_var.get() == "勝利":
             self.defeat_reason_var.set("")
 
     def _save(self) -> None:
-        date         = self.date_var.get().strip()
-        rank         = self.rank_var.get().strip()
-        first_second = self.fs_var.get()
-        result       = self.result_var.get()
+        date          = self.date_var.get().strip()
+        rank          = self.rank_var.get().strip()
+        first_second  = self.fs_var.get()
+        result        = self.result_var.get()
         defeat_reason = self.defeat_reason_var.get().strip()
-        deck_name    = self.deck_var.get().strip()
+        deck_name     = self.deck_var.get().strip()
         opponent_deck = self._opp_combo.get().strip()
 
         if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):

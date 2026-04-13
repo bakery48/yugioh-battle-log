@@ -328,78 +328,64 @@ class _ReplaceDialog:
         self.top.deiconify()
 
     def _build_ui(self) -> None:
-        outer = ctk.CTkFrame(self.top, fg_color="transparent")
-        outer.pack(padx=20, pady=15, fill="both", expand=True)
+        outer = ttk.Frame(self.top, padding=(20, 15))
+        outer.pack(fill="both", expand=True)
 
         # ── 相手デッキ ─────────────────────────────────────────────────────────
-        opp_section = ctk.CTkFrame(outer, border_width=1)
+        opp_section = ttk.LabelFrame(outer, text="相手デッキ", padding=(8, 6))
         opp_section.pack(fill="x", pady=(0, 10))
-        ctk.CTkLabel(opp_section, text="相手デッキ", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(6, 4))
-
-        opp_inner = ctk.CTkFrame(opp_section, fg_color="transparent")
-        opp_inner.pack(fill="x", padx=10, pady=(0, 10))
 
         opp_names = db.get_distinct_opponent_decks()
 
-        ctk.CTkLabel(opp_inner, text="置換前:", font=_FONT).grid(
+        ttk.Label(opp_section, text="置換前:").grid(
             row=0, column=0, sticky="e", padx=(0, 6), pady=4)
-        self._opp_old = ctk.CTkComboBox(opp_inner, values=opp_names,
-                                         width=220, font=_FONT,
-                                         dropdown_font=_FONT)
+        self._opp_old = ttk.Combobox(opp_section, values=opp_names,
+                                     width=26, font=_FONT)
         self._opp_old.grid(row=0, column=1, padx=(0, 10))
         if opp_names:
             self._opp_old.set(opp_names[0])
 
-        ctk.CTkLabel(opp_inner, text="置換後:", font=_FONT).grid(
+        ttk.Label(opp_section, text="置換後:").grid(
             row=1, column=0, sticky="e", padx=(0, 6), pady=4)
-        self._opp_new = ctk.CTkComboBox(opp_inner, values=opp_names,
-                                         width=220, font=_FONT,
-                                         dropdown_font=_FONT)
+        self._opp_new = ttk.Combobox(opp_section, values=opp_names,
+                                     width=26, font=_FONT)
         self._opp_new.grid(row=1, column=1, padx=(0, 10))
 
-        ctk.CTkButton(opp_inner, text="置換実行", width=80, font=_FONT,
-                      command=self._replace_opp).grid(
+        ttk.Button(opp_section, text="置換実行",
+                   command=self._replace_opp).grid(
             row=0, column=2, rowspan=2, padx=(0, 4))
 
         # ── 使用デッキ ─────────────────────────────────────────────────────────
-        own_section = ctk.CTkFrame(outer, border_width=1)
+        own_section = ttk.LabelFrame(outer, text="使用デッキ", padding=(8, 6))
         own_section.pack(fill="x", pady=(0, 10))
-        ctk.CTkLabel(own_section, text="使用デッキ", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(6, 4))
-
-        own_inner = ctk.CTkFrame(own_section, fg_color="transparent")
-        own_inner.pack(fill="x", padx=10, pady=(0, 10))
 
         decks = db.get_all_decks()
         deck_names = [d["name"] for d in decks]
         self._decks = decks
 
-        ctk.CTkLabel(own_inner, text="置換前:", font=_FONT).grid(
+        ttk.Label(own_section, text="置換前:").grid(
             row=0, column=0, sticky="e", padx=(0, 6), pady=4)
         self._own_old_var = tk.StringVar(value=deck_names[0] if deck_names else "")
-        self._own_old_menu = ctk.CTkOptionMenu(
-            own_inner, variable=self._own_old_var,
-            values=deck_names or ["（デッキなし）"],
-            width=220, font=_FONT, dropdown_font=_FONT)
-        self._own_old_menu.grid(row=0, column=1, padx=(0, 10))
+        ttk.Combobox(own_section, textvariable=self._own_old_var,
+                     values=deck_names or ["（デッキなし）"],
+                     width=26, font=_FONT, state="readonly").grid(
+            row=0, column=1, padx=(0, 10))
 
-        ctk.CTkLabel(own_inner, text="置換後:", font=_FONT).grid(
+        ttk.Label(own_section, text="置換後:").grid(
             row=1, column=0, sticky="e", padx=(0, 6), pady=4)
         self._own_new_var = tk.StringVar(value=deck_names[0] if deck_names else "")
-        self._own_new_menu = ctk.CTkOptionMenu(
-            own_inner, variable=self._own_new_var,
-            values=deck_names or ["（デッキなし）"],
-            width=220, font=_FONT, dropdown_font=_FONT)
-        self._own_new_menu.grid(row=1, column=1, padx=(0, 10))
+        ttk.Combobox(own_section, textvariable=self._own_new_var,
+                     values=deck_names or ["（デッキなし）"],
+                     width=26, font=_FONT, state="readonly").grid(
+            row=1, column=1, padx=(0, 10))
 
-        ctk.CTkButton(own_inner, text="置換実行", width=80, font=_FONT,
-                      command=self._replace_own).grid(
+        ttk.Button(own_section, text="置換実行",
+                   command=self._replace_own).grid(
             row=0, column=2, rowspan=2, padx=(0, 4))
 
         # ── 閉じる ─────────────────────────────────────────────────────────────
-        ctk.CTkButton(outer, text="閉じる", command=self.top.destroy,
-                      width=100, font=_FONT).pack(pady=(4, 0))
+        ttk.Button(outer, text="閉じる", command=self.top.destroy,
+                   width=12).pack(pady=(4, 0))
 
         self.top.bind("<Escape>", lambda _: self.top.destroy())
 
@@ -429,8 +415,8 @@ class _ReplaceDialog:
             self.changed = True
             # ドロップダウンを更新
             updated = db.get_distinct_opponent_decks()
-            self._opp_old.configure(values=updated)
-            self._opp_new.configure(values=updated)
+            self._opp_old["values"] = updated
+            self._opp_new["values"] = updated
 
     def _replace_own(self) -> None:
         old_name = self._own_old_var.get()
