@@ -159,11 +159,11 @@ class BattleTab:
         filters = self._get_filters()
         self._battles = db.get_battles(filters or None)
 
-        for iid in self.tree.get_children():
-            self.tree.delete(iid)
+        children = self.tree.get_children()
+        if children:
+            self.tree.delete(*children)
 
         for b in self._battles:
-            tag = "win" if b["result"] == "勝利" else "loss"
             self.tree.insert(
                 "", "end", iid=str(b["id"]),
                 values=(
@@ -171,9 +171,12 @@ class BattleTab:
                     b["deck_name"] or "（削除済み）",
                     b["opponent_deck"], b["defeat_reason"] or "",
                 ),
-                tags=(tag,),
+                tags=("win" if b["result"] == "勝利" else "loss",),
             )
 
+        self._update_count_label()
+
+    def _update_count_label(self) -> None:
         total = len(self._battles)
         wins = sum(1 for b in self._battles if b["result"] == "勝利")
         self.count_label.configure(text=f"{total} 件  （{wins}勝 {total - wins}敗）")
@@ -223,14 +226,31 @@ class BattleTab:
                            last_deck_name=self._last_deck_name)
         self.frame.wait_window(dlg.top)
         if dlg.result:
-            db.add_battle(**dlg.result)
-            self._last_rank = dlg.result["rank"]
-            deck = next((d for d in decks if d["id"] == dlg.result["deck_id"]), None)
+            new_id = db.add_battle(**dlg.result)
+            r = dlg.result
+            self._last_rank = r["rank"]
+            deck = next((d for d in decks if d["id"] == r["deck_id"]), None)
             if deck:
                 self._last_deck_name = deck["name"]
             _save_prefs({"last_rank": self._last_rank,
                          "last_deck_name": self._last_deck_name})
-            self.load_battles()
+
+            # フィルタ適用中は確実に表示が一致するよう再読み込み
+            if self._get_filters():
+                self.load_battles()
+                return
+
+            # フィルタなし → ツリー先頭に1行だけ挿入（高速）
+            deck_name = deck["name"] if deck else "（削除済み）"
+            b = {**r, "id": new_id, "deck_name": deck_name}
+            self._battles.insert(0, b)
+            self.tree.insert(
+                "", 0, iid=str(new_id),
+                values=(b["date"], b["rank"], b["first_second"], b["result"],
+                        deck_name, b["opponent_deck"], b["defeat_reason"] or ""),
+                tags=("win" if b["result"] == "勝利" else "loss",),
+            )
+            self._update_count_label()
 
     def edit_battle(self) -> None:
         battle = self._selected_battle()

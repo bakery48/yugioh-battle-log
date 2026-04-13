@@ -349,16 +349,17 @@ def add_battle(
     defeat_reason: str,
     deck_id: Optional[int],
     opponent_deck: str,
-) -> None:
+) -> int:
     conn = _get_conn()
     try:
-        conn.execute(
+        cur = conn.execute(
             """INSERT INTO battles
                (date, rank, first_second, result, defeat_reason, deck_id, opponent_deck)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (date, rank, first_second, result, defeat_reason, deck_id, opponent_deck),
         )
         conn.commit()
+        return cur.lastrowid
     finally:
         conn.close()
 
