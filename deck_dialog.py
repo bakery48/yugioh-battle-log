@@ -40,11 +40,22 @@ class DeckDialog:
     def _build_ui(self, deck: Optional[dict]) -> None:
         px, py = 12, 6
 
-        # ── Scrollable container ──────────────────────────────────────────────
-        outer = ttk.Frame(self.top)
-        outer.pack(fill="both", expand=True, padx=4, pady=4)
+        # ── Deck name (outside canvas to avoid canvas keyboard routing issues) ─
+        name_row = ttk.Frame(self.top)
+        name_row.pack(fill="x", padx=16, pady=(12, 4))
+        ttk.Label(name_row, text="デッキ名 *", font=_FONT_BOLD).pack(
+            side="left", padx=(0, px))
+        self.name_var = tk.StringVar(value=deck["name"] if deck else "")
+        name_entry = ttk.Entry(name_row, textvariable=self.name_var,
+                               width=30, font=_FONT)
+        name_entry.pack(side="left")
+        name_entry.bind("<Return>", lambda _: self._save())
 
-        self._canvas = tk.Canvas(outer, width=480, height=500,
+        # ── Scrollable section (tags / weakness / strength) ───────────────────
+        outer = ttk.Frame(self.top)
+        outer.pack(fill="both", expand=True, padx=4, pady=0)
+
+        self._canvas = tk.Canvas(outer, width=480, height=420,
                                  highlightthickness=0)
         vscroll = ttk.Scrollbar(outer, orient="vertical",
                                 command=self._canvas.yview)
@@ -70,18 +81,10 @@ class DeckDialog:
             ttk.Label(frame, text=text, font=_FONT_BOLD).grid(
                 row=row, column=0, sticky=anchor, padx=(0, px), pady=py)
 
-        # ── Deck name ─────────────────────────────────────────────────────────
-        lbl(0, "デッキ名 *")
-        self.name_var = tk.StringVar(value=deck["name"] if deck else "")
-        name_entry = ttk.Entry(frame, textvariable=self.name_var, width=30,
-                               font=_FONT)
-        name_entry.grid(row=0, column=1, sticky="w", padx=px, pady=py)
-        name_entry.focus_set()
-
         # ── Tags ──────────────────────────────────────────────────────────────
-        lbl(1, "タグ", anchor="ne")
+        lbl(0, "タグ", anchor="ne")
         tags_frame = ttk.Frame(frame)
-        tags_frame.grid(row=1, column=1, sticky="w", padx=px, pady=py)
+        tags_frame.grid(row=0, column=1, sticky="w", padx=px, pady=py)
         selected_ids = {t["id"] for t in deck["tags"]} if deck else set()
         self.tag_vars: dict = {}
         if self.tags:
@@ -97,9 +100,9 @@ class DeckDialog:
                       foreground="gray").pack()
 
         # ── Weakness (弱み) ───────────────────────────────────────────────────
-        lbl(2, "弱み", anchor="ne")
+        lbl(1, "弱み", anchor="ne")
         self._weakness_outer = ttk.Frame(frame)
-        self._weakness_outer.grid(row=2, column=1, sticky="w", padx=px, pady=py)
+        self._weakness_outer.grid(row=1, column=1, sticky="w", padx=px, pady=py)
         self._wtag_vars: dict = {}
         self._wtag_check_frame = ttk.Frame(self._weakness_outer)
         self._wtag_check_frame.pack(anchor="w")
@@ -118,9 +121,9 @@ class DeckDialog:
         we.bind("<Return>", lambda _: self._add_wtag())
 
         # ── Strength (強み) ───────────────────────────────────────────────────
-        lbl(3, "強み", anchor="ne")
+        lbl(2, "強み", anchor="ne")
         self._strength_outer = ttk.Frame(frame)
-        self._strength_outer.grid(row=3, column=1, sticky="w", padx=px, pady=py)
+        self._strength_outer.grid(row=2, column=1, sticky="w", padx=px, pady=py)
         self._stag_vars: dict = {}
         self._stag_check_frame = ttk.Frame(self._strength_outer)
         self._stag_check_frame.pack(anchor="w")
@@ -138,15 +141,16 @@ class DeckDialog:
                    width=6).pack(side="left", padx=(4, 0))
         se.bind("<Return>", lambda _: self._add_stag())
 
-        # ── Buttons ───────────────────────────────────────────────────────────
-        btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=4, column=0, columnspan=2, pady=(12, 0))
+        # ── Buttons (outside canvas) ──────────────────────────────────────────
+        btn_frame = ttk.Frame(self.top)
+        btn_frame.pack(pady=(8, 12))
         ttk.Button(btn_frame, text="保存", command=self._save,
                    width=10).pack(side="left", padx=8)
         ttk.Button(btn_frame, text="キャンセル", command=self.top.destroy,
                    width=10).pack(side="left", padx=8)
 
         self.top.bind("<Escape>", lambda _: self.top.destroy())
+        self.top.after(0, name_entry.focus_set)
 
     # ── Tag helpers ───────────────────────────────────────────────────────────
 
