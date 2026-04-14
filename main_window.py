@@ -176,4 +176,11 @@ class MainWindow:
     def _on_close(self) -> None:
         if self.color_monitor_tab is not None:
             self.color_monitor_tab.save_settings()
-        os._exit(0)
+        # TerminateProcess bypasses DLL DllMain(DETACH) cleanup which can take
+        # several seconds (Tcl/Tk, pywin32, numpy/OpenBLAS, etc.)
+        try:
+            import ctypes
+            ctypes.windll.kernel32.TerminateProcess(
+                ctypes.windll.kernel32.GetCurrentProcess(), 0)
+        except Exception:
+            os._exit(0)
