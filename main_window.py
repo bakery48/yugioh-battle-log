@@ -65,8 +65,9 @@ class MainWindow:
                                          on_deck_changed=self._on_deck_changed)
         self.stats_tab         = StatsTab(self._tab_frames["統計"])
         self.matchup_tab       = MatchupTab(self._tab_frames["相手別勝率"])
+        # ChartTab and ColorMonitorTab are heavy to initialize; build lazily on first visit
         self.chart_tab         = ChartTab(self._tab_frames["デッキ分布"])
-        self.color_monitor_tab = ColorMonitorTab(self._tab_frames["色変化監視"])
+        self.color_monitor_tab = None   # created on first visit
 
     # ── TTK style ─────────────────────────────────────────────────────────────
 
@@ -157,7 +158,13 @@ class MainWindow:
             tab_name = self.tabview.tab(self.tabview.select(), "text")
         except Exception:
             return
-        if tab_name == "統計":
+        if tab_name == "デッキ分布":
+            self.chart_tab.build_if_needed()
+        elif tab_name == "色変化監視":
+            if self.color_monitor_tab is None:
+                self.color_monitor_tab = ColorMonitorTab(
+                    self._tab_frames["色変化監視"])
+        elif tab_name == "統計":
             self.stats_tab.refresh_filter_lists()
         elif tab_name == "戦績一覧":
             self.battle_tab.load_battles()
@@ -166,6 +173,7 @@ class MainWindow:
         self.stats_tab.refresh_filter_lists()
 
     def _on_close(self) -> None:
-        self.color_monitor_tab.save_settings()
+        if self.color_monitor_tab is not None:
+            self.color_monitor_tab.save_settings()
         self.root.withdraw()
         self.root.quit()

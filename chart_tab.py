@@ -9,40 +9,61 @@ from constants import RANKS, MPL_FONT_CANDIDATES
 _FONT      = ("Meiryo", 10)
 _FONT_BOLD = ("Meiryo", 10, "bold")
 
-try:
-    import matplotlib
-    import matplotlib.pyplot as plt
-    import matplotlib.font_manager as fm
-    from matplotlib.figure import Figure
-    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
-    matplotlib.use("TkAgg")
-
-    available = {f.name for f in fm.fontManager.ttflist}
-    chosen = next((f for f in MPL_FONT_CANDIDATES if f in available), None)
-    if chosen:
-        matplotlib.rcParams["font.family"] = chosen
-    else:
-        matplotlib.rcParams["font.family"] = "sans-serif"
-        matplotlib.rcParams["axes.unicode_minus"] = False
-
-    MPL_OK = True
-except ImportError:
-    MPL_OK = False
+# matplotlib is imported lazily inside _build_ui to avoid slow font-cache scan at startup
+plt = None
+Figure = None
+FigureCanvasTkAgg = None
+MPL_OK = None   # None = not yet checked
 
 OTHERS_LABEL     = "その他"
 OTHERS_THRESHOLD = 0.05
+
+
+def _ensure_mpl():
+    """Import matplotlib on first use; sets module-level globals."""
+    global plt, Figure, FigureCanvasTkAgg, MPL_OK
+    if MPL_OK is not None:
+        return
+    try:
+        import matplotlib
+        import matplotlib.pyplot as _plt
+        import matplotlib.font_manager as fm
+        from matplotlib.figure import Figure as _Figure
+        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg as _FigCanvas
+
+        matplotlib.use("TkAgg")
+
+        available = {f.name for f in fm.fontManager.ttflist}
+        chosen = next((f for f in MPL_FONT_CANDIDATES if f in available), None)
+        if chosen:
+            matplotlib.rcParams["font.family"] = chosen
+        else:
+            matplotlib.rcParams["font.family"] = "sans-serif"
+            matplotlib.rcParams["axes.unicode_minus"] = False
+
+        plt             = _plt
+        Figure          = _Figure
+        FigureCanvasTkAgg = _FigCanvas
+        MPL_OK = True
+    except ImportError:
+        MPL_OK = False
 
 
 class ChartTab:
     def __init__(self, parent: tk.Widget):
         self.frame = ttk.Frame(parent)
         self.frame.pack(fill="both", expand=True)
-        self._build_ui()
+        self._built = False
+
+    def build_if_needed(self) -> None:
+        if not self._built:
+            self._built = True
+            self._build_ui()
 
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
+        _ensure_mpl()
         if not MPL_OK:
             ttk.Label(
                 self.frame,
