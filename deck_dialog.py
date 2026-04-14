@@ -71,9 +71,16 @@ class DeckDialog:
                        scrollregion=self._canvas.bbox("all")))
         self._canvas.bind("<Configure>",
                           lambda e: self._canvas.itemconfig(_win, width=e.width))
-        self._canvas.bind("<MouseWheel>",
-                          lambda e: self._canvas.yview_scroll(
-                              int(-e.delta / 120), "units"))
+
+        # bind_all: チェックボックス等の子ウィジェット上でもスクロールが効くよう
+        # ダイアログ全体にホイールを捕捉する（モーダルなので安全）
+        def _scroll(e):
+            self._canvas.yview_scroll(int(-e.delta / 120), "units")
+        self._canvas.bind_all("<MouseWheel>", _scroll)
+        # ダイアログを閉じたら bind_all を解除
+        self.top.bind("<Destroy>",
+                      lambda e: self._canvas.unbind_all("<MouseWheel>")
+                      if e.widget is self.top else None)
 
         frame.columnconfigure(1, weight=1)
 
