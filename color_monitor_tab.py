@@ -1,7 +1,7 @@
 """Color change monitor tab."""
 
 import tkinter as tk
-from tkinter import messagebox, colorchooser
+from tkinter import ttk, messagebox, colorchooser
 import threading
 import time
 import math
@@ -304,8 +304,25 @@ class ColorMonitorTab:
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        scroll = ctk.CTkScrollableFrame(self.frame)
-        scroll.pack(fill="both", expand=True, padx=4, pady=4)
+        outer = ctk.CTkFrame(self.frame, fg_color="transparent")
+        outer.pack(fill="both", expand=True, padx=4, pady=4)
+
+        _canvas = tk.Canvas(outer, highlightthickness=0)
+        _vsb = ttk.Scrollbar(outer, orient="vertical", command=_canvas.yview)
+        _canvas.configure(yscrollcommand=_vsb.set)
+        _vsb.pack(side="right", fill="y")
+        _canvas.pack(side="left", fill="both", expand=True)
+
+        scroll = ctk.CTkFrame(_canvas, fg_color="transparent")
+        _win = _canvas.create_window((0, 0), window=scroll, anchor="nw")
+        scroll.bind("<Configure>",
+                    lambda e: _canvas.configure(
+                        scrollregion=_canvas.bbox("all")))
+        _canvas.bind("<Configure>",
+                     lambda e: _canvas.itemconfig(_win, width=e.width))
+        _canvas.bind("<MouseWheel>",
+                     lambda e: _canvas.yview_scroll(
+                         int(-e.delta / 120), "units"))
 
         # ── ウィンドウ選択 ────────────────────────────────────────────────────
         wf = ctk.CTkFrame(scroll, border_width=1)
