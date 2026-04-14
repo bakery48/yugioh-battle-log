@@ -153,4 +153,4 @@ class MainWindow:
 
     def _on_close(self) -> None:
         self.color_monitor_tab.save_settings()
-        self.root.destroy()
+        self.root.quit()
