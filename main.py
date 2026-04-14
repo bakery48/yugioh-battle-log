@@ -54,7 +54,6 @@ def main() -> None:
 
     MainWindow(root)
     root.mainloop()
-    os._exit(0)
 
 
 if __name__ == "__main__":

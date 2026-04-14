@@ -1,5 +1,6 @@
 """Main application window with tabbed layout."""
 
+import os
 import tkinter as tk
 from tkinter import ttk
 
@@ -175,5 +176,4 @@ class MainWindow:
     def _on_close(self) -> None:
         if self.color_monitor_tab is not None:
             self.color_monitor_tab.save_settings()
-        self.root.withdraw()
-        self.root.quit()
+        os._exit(0)
