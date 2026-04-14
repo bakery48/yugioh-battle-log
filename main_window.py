@@ -93,10 +93,18 @@ class MainWindow:
             style.configure("TLabel",       background=bg, foreground=fg, font=_FONT)
             style.configure("TCheckbutton", background=bg, foreground=fg, font=_FONT)
             style.configure("TRadiobutton", background=bg, foreground=fg, font=_FONT)
-            style.configure("TEntry",       fieldbackground=field, foreground=fg,
-                            font=_FONT)
             style.configure("TCombobox",    fieldbackground=field, foreground=fg,
-                            font=_FONT)
+                            selectbackground=sel_bg, selectforeground="white",
+                            insertcolor=fg, arrowcolor=fg, font=_FONT)
+            style.map("TCombobox",
+                      fieldbackground=[("readonly", field), ("disabled", bg)],
+                      foreground=[("readonly", fg), ("disabled", "#888")],
+                      selectbackground=[("readonly", field)],
+                      selectforeground=[("readonly", fg)],
+                      arrowcolor=[("disabled", "#888")])
+            style.configure("TEntry",       fieldbackground=field, foreground=fg,
+                            selectbackground=sel_bg, selectforeground="white",
+                            insertcolor=fg, font=_FONT)
             style.configure("TButton",      background="#4a4a4a", foreground=fg,
                             font=_FONT)
             style.map("TButton",
