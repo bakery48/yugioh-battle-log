@@ -12,14 +12,14 @@ _FONT      = ("Meiryo", 10)
 _FONT_BOLD = ("Meiryo", 10, "bold")
 
 _COL_CFG = [
-    # (column_id,  header,       width, anchor, stretch)
-    ("deck",       "相手デッキ", 160,   "w",    True),
-    ("total_n",    "総合\n試合", 54,    "center", False),
-    ("total_wr",   "総合\n勝率", 66,    "center", False),
-    ("first_n",    "先攻\n試合", 54,    "center", False),
-    ("first_wr",   "先攻\n勝率", 66,    "center", False),
-    ("second_n",   "後攻\n試合", 54,    "center", False),
-    ("second_wr",  "後攻\n勝率", 66,    "center", False),
+    # (column_id,  header,       width, anchor)
+    ("deck",       "相手デッキ", 160,   "w"),
+    ("total_n",    "総合\n試合", 54,    "center"),
+    ("total_wr",   "総合\n勝率", 66,    "center"),
+    ("first_n",    "先攻\n試合", 54,    "center"),
+    ("first_wr",   "先攻\n勝率", 66,    "center"),
+    ("second_n",   "後攻\n試合", 54,    "center"),
+    ("second_wr",  "後攻\n勝率", 66,    "center"),
 ]
 
 
@@ -114,11 +114,11 @@ class MatchupTab:
         cols = [c[0] for c in _COL_CFG]
         self.tree = ttk.Treeview(tree_frame, columns=cols,
                                   show="headings", selectmode="browse")
-        for col_id, header, width, anchor, stretch in _COL_CFG:
+        for col_id, header, width, anchor in _COL_CFG:
             self.tree.heading(col_id, text=header,
                               command=lambda c=col_id: self._sort_by(c))
             self.tree.column(col_id, width=width, anchor=anchor,
-                             stretch=stretch, minwidth=30)
+                             stretch=True, minwidth=30)
 
         vsb = ttk.Scrollbar(tree_frame, orient="vertical",
                             command=self.tree.yview)
