@@ -3,8 +3,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from typing import Callable, Optional
-import customtkinter as ctk
-
 import database as db
 from deck_dialog import DeckDialog
 
@@ -15,7 +13,7 @@ _FONT_BOLD = ("Meiryo", 10, "bold")
 class DeckTab:
     def __init__(self, parent: tk.Widget,
                  on_deck_changed: Optional[Callable] = None):
-        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame = ttk.Frame(parent)
         self.frame.pack(fill="both", expand=True)
         self.on_deck_changed = on_deck_changed
         self._tags: list = []

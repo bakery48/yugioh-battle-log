@@ -2,7 +2,6 @@
 
 import tkinter as tk
 from tkinter import ttk
-import customtkinter as ctk
 
 from battle_tab import BattleTab
 from deck_tab import DeckTab
@@ -33,8 +32,9 @@ _FONT_BOLD = ("Meiryo", 10, "bold")
 
 
 class MainWindow:
-    def __init__(self, root: ctk.CTk):
+    def __init__(self, root: tk.Tk):
         self.root = root
+        self._is_dark = False
         self._build_ui()
         self._apply_ttk_style(is_dark=False)
         self._broadcast_theme(is_dark=False)
@@ -43,37 +43,32 @@ class MainWindow:
     # ── Layout ────────────────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        toolbar = ctk.CTkFrame(self.root, height=36, fg_color="transparent")
+        toolbar = ttk.Frame(self.root)
         toolbar.pack(fill="x", padx=4, pady=(4, 0))
 
-        self._theme_btn = ctk.CTkButton(
-            toolbar, text="🌙 ダーク", command=self._toggle_theme,
-            width=90, font=ctk.CTkFont(family="Meiryo", size=10),
-        )
+        self._theme_btn = ttk.Button(
+            toolbar, text="🌙 ダーク", command=self._toggle_theme, width=10)
         self._theme_btn.pack(side="right")
 
-        self.tabview = ctk.CTkTabview(self.root, command=self._on_tab_changed)
+        self.tabview = ttk.Notebook(self.root)
         self.tabview.pack(fill="both", expand=True, padx=4, pady=4)
-        # Set tab button font via the internal segmented button
-        try:
-            self.tabview._segmented_button.configure(
-                font=ctk.CTkFont(family="Meiryo", size=10)
-            )
-        except Exception:
-            pass
+        self.tabview.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
+        self._tab_frames: dict = {}
         for name in ("戦績一覧", "デッキ管理", "統計", "相手別勝率", "デッキ分布", "色変化監視"):
-            self.tabview.add(name)
+            frame = ttk.Frame(self.tabview)
+            self.tabview.add(frame, text=name)
+            self._tab_frames[name] = frame
 
-        self.battle_tab        = BattleTab(self.tabview.tab("戦績一覧"))
-        self.deck_tab          = DeckTab(self.tabview.tab("デッキ管理"),
+        self.battle_tab        = BattleTab(self._tab_frames["戦績一覧"])
+        self.deck_tab          = DeckTab(self._tab_frames["デッキ管理"],
                                          on_deck_changed=self._on_deck_changed)
-        self.stats_tab         = StatsTab(self.tabview.tab("統計"))
-        self.matchup_tab       = MatchupTab(self.tabview.tab("相手別勝率"))
-        self.chart_tab         = ChartTab(self.tabview.tab("デッキ分布"))
-        self.color_monitor_tab = ColorMonitorTab(self.tabview.tab("色変化監視"))
+        self.stats_tab         = StatsTab(self._tab_frames["統計"])
+        self.matchup_tab       = MatchupTab(self._tab_frames["相手別勝率"])
+        self.chart_tab         = ChartTab(self._tab_frames["デッキ分布"])
+        self.color_monitor_tab = ColorMonitorTab(self._tab_frames["色変化監視"])
 
-    # ── TTK style (for Treeview / Listbox / PanedWindow) ──────────────────────
+    # ── TTK style ─────────────────────────────────────────────────────────────
 
     def _apply_ttk_style(self, is_dark: bool) -> None:
         style = ttk.Style()
@@ -111,6 +106,8 @@ class MainWindow:
                       background=[("active", "#5a5a5a"), ("pressed", "#3a3a3a")])
             style.configure("TScrollbar",   background="#4a4a4a", troughcolor=bg)
             style.configure("TSeparator",   background="#555")
+            style.configure("TScale",       background=bg, troughcolor=field,
+                            sliderlength=15)
             style.configure("Treeview",
                             background=field, foreground=fg,
                             fieldbackground=field, rowheight=26, font=_FONT)
@@ -121,6 +118,12 @@ class MainWindow:
                       background=[("selected", sel_bg)],
                       foreground=[("selected", "white")])
             style.configure("TPanedwindow", background=bg)
+            style.configure("TNotebook",    background=bg, tabmargins=[2, 5, 2, 0])
+            style.configure("TNotebook.Tab", background=field, foreground=fg,
+                            padding=[8, 4], font=_FONT)
+            style.map("TNotebook.Tab",
+                      background=[("selected", sel_bg), ("active", "#4a4a4a")],
+                      foreground=[("selected", "white"), ("active", fg)])
         else:
             for theme in ("vista", "winnative", "clam", "default"):
                 if theme in style.theme_names():
@@ -131,15 +134,15 @@ class MainWindow:
             style.configure("Treeview",          rowheight=26, font=_FONT)
             style.configure("Treeview.Heading",  font=_FONT_BOLD)
             style.configure("TLabelframe.Label", font=_FONT_BOLD)
+            style.configure("TNotebook.Tab",     font=_FONT)
 
     # ── Theme ─────────────────────────────────────────────────────────────────
 
     def _toggle_theme(self) -> None:
-        is_dark = ctk.get_appearance_mode().lower() != "dark"
-        ctk.set_appearance_mode("dark" if is_dark else "light")
-        self._theme_btn.configure(text="☀ ライト" if is_dark else "🌙 ダーク")
-        self._apply_ttk_style(is_dark)
-        self._broadcast_theme(is_dark)
+        self._is_dark = not self._is_dark
+        self._theme_btn.configure(text="☀ ライト" if self._is_dark else "🌙 ダーク")
+        self._apply_ttk_style(self._is_dark)
+        self._broadcast_theme(self._is_dark)
 
     def _broadcast_theme(self, is_dark: bool) -> None:
         colors = _TREE_DARK if is_dark else _TREE_LIGHT
@@ -149,8 +152,11 @@ class MainWindow:
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
-    def _on_tab_changed(self) -> None:
-        tab_name = self.tabview.get()
+    def _on_tab_changed(self, event=None) -> None:
+        try:
+            tab_name = self.tabview.tab(self.tabview.select(), "text")
+        except Exception:
+            return
         if tab_name == "統計":
             self.stats_tab.refresh_filter_lists()
         elif tab_name == "戦績一覧":
@@ -161,5 +167,5 @@ class MainWindow:
 
     def _on_close(self) -> None:
         self.color_monitor_tab.save_settings()
-        self.root.withdraw()  # 即座にウィンドウを隠す（体感速度向上）
-        self.root.quit()      # mainloop を終了 → main.py で os._exit(0)
+        self.root.withdraw()
+        self.root.quit()

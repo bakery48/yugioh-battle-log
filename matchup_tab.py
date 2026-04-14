@@ -2,7 +2,6 @@
 
 import tkinter as tk
 from tkinter import ttk
-import customtkinter as ctk
 from collections import defaultdict
 
 import database as db
@@ -42,7 +41,7 @@ def _sort_key(val: str) -> float:
 
 class MatchupTab:
     def __init__(self, parent: tk.Widget):
-        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame = ttk.Frame(parent)
         self.frame.pack(fill="both", expand=True)
         self._rows: list = []
         self._sort_col: str = "first_wr"
@@ -53,79 +52,75 @@ class MatchupTab:
 
     def _build_ui(self) -> None:
         # ── Filter ────────────────────────────────────────────────────────────
-        f_outer = ctk.CTkFrame(self.frame, border_width=1)
+        f_outer = ttk.LabelFrame(self.frame, text="フィルタ", padding=6)
         f_outer.pack(fill="x", padx=6, pady=(6, 2))
-        ctk.CTkLabel(f_outer, text="フィルタ", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
 
-        ff = ctk.CTkFrame(f_outer, fg_color="transparent")
+        ff = ttk.Frame(f_outer)
         ff.pack(fill="x", padx=8, pady=(0, 8))
 
         # 期間
-        ctk.CTkLabel(ff, text="期間:", font=_FONT).grid(
+        ttk.Label(ff, text="期間:").grid(
             row=0, column=0, sticky="e", padx=(0, 4), pady=3)
         self.date_from_var = tk.StringVar()
-        ctk.CTkEntry(ff, textvariable=self.date_from_var, width=110,
-                     font=_FONT).grid(row=0, column=1, padx=2)
-        ctk.CTkLabel(ff, text="～", font=_FONT).grid(row=0, column=2)
+        ttk.Entry(ff, textvariable=self.date_from_var, width=12).grid(
+            row=0, column=1, padx=2)
+        ttk.Label(ff, text="～").grid(row=0, column=2)
         self.date_to_var = tk.StringVar()
-        ctk.CTkEntry(ff, textvariable=self.date_to_var, width=110,
-                     font=_FONT).grid(row=0, column=3, padx=2)
-        ctk.CTkLabel(ff, text="YYYY-MM-DD", text_color="gray",
-                     font=_FONT).grid(row=0, column=4, padx=6)
+        ttk.Entry(ff, textvariable=self.date_to_var, width=12).grid(
+            row=0, column=3, padx=2)
+        ttk.Label(ff, text="YYYY-MM-DD", foreground="gray").grid(
+            row=0, column=4, padx=6)
 
         # ランク
-        ctk.CTkLabel(ff, text="ランク:", font=_FONT).grid(
+        ttk.Label(ff, text="ランク:").grid(
             row=1, column=0, sticky="e", padx=(0, 4), pady=3)
-        rank_inner = ctk.CTkFrame(ff, fg_color="transparent")
+        rank_inner = ttk.Frame(ff)
         rank_inner.grid(row=1, column=1, columnspan=6, sticky="w")
         self.rank_vars: dict = {}
         for rank in RANKS:
             var = tk.BooleanVar()
             self.rank_vars[rank] = var
-            ctk.CTkCheckBox(rank_inner, text=rank, variable=var,
-                            font=_FONT, width=56).pack(side="left", padx=3)
+            ttk.Checkbutton(rank_inner, text=rank, variable=var).pack(
+                side="left", padx=3)
 
         # 最小対戦数
-        ctk.CTkLabel(ff, text="最小対戦数:", font=_FONT).grid(
+        ttk.Label(ff, text="最小対戦数:").grid(
             row=2, column=0, sticky="e", padx=(0, 4), pady=3)
         self.min_n_var = tk.StringVar(value="1")
-        ctk.CTkEntry(ff, textvariable=self.min_n_var, width=50,
-                     font=_FONT).grid(row=2, column=1, sticky="w")
-        ctk.CTkLabel(ff, text="戦以上を表示", text_color="gray",
-                     font=_FONT).grid(row=2, column=2, columnspan=2,
-                                      sticky="w", padx=2)
+        ttk.Entry(ff, textvariable=self.min_n_var, width=6).grid(
+            row=2, column=1, sticky="w")
+        ttk.Label(ff, text="戦以上を表示", foreground="gray").grid(
+            row=2, column=2, columnspan=2, sticky="w", padx=2)
 
         # 分析軸
-        ctk.CTkLabel(ff, text="分析軸:", font=_FONT).grid(
+        ttk.Label(ff, text="分析軸:").grid(
             row=3, column=0, sticky="e", padx=(0, 4), pady=3)
         self._axis_var = tk.StringVar(value="opponent")
-        axis_inner = ctk.CTkFrame(ff, fg_color="transparent")
+        axis_inner = ttk.Frame(ff)
         axis_inner.grid(row=3, column=1, columnspan=6, sticky="w")
-        ctk.CTkRadioButton(axis_inner, text="相手デッキ別",
-                           variable=self._axis_var, value="opponent",
-                           font=_FONT).pack(side="left", padx=(0, 16))
-        ctk.CTkRadioButton(axis_inner, text="自デッキ別",
-                           variable=self._axis_var, value="own",
-                           font=_FONT).pack(side="left")
+        ttk.Radiobutton(axis_inner, text="相手デッキ別",
+                        variable=self._axis_var, value="opponent").pack(
+            side="left", padx=(0, 16))
+        ttk.Radiobutton(axis_inner, text="自デッキ別",
+                        variable=self._axis_var, value="own").pack(side="left")
 
         # ボタン
-        btn_row = ctk.CTkFrame(ff, fg_color="transparent")
+        btn_row = ttk.Frame(ff)
         btn_row.grid(row=4, column=0, columnspan=7, pady=(6, 0))
-        ctk.CTkButton(btn_row, text="集計", command=self.calculate,
-                      width=80, font=_FONT).pack(side="left", padx=6)
-        ctk.CTkButton(btn_row, text="リセット", command=self.reset,
-                      width=80, font=_FONT).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="集計", command=self.calculate).pack(
+            side="left", padx=6)
+        ttk.Button(btn_row, text="リセット", command=self.reset).pack(
+            side="left", padx=6)
 
         # ── Table ─────────────────────────────────────────────────────────────
-        sort_hint = ctk.CTkFrame(self.frame, fg_color="transparent")
+        sort_hint = ttk.Frame(self.frame)
         sort_hint.pack(fill="x", padx=8, pady=(4, 0))
-        ctk.CTkLabel(sort_hint,
-                     text="列ヘッダをクリックでソート  ／  デフォルト: 先攻勝率（低い順）"
-                          "  ／  後攻有利%: 後攻プレイヤーが勝つ確率（50%超＝後攻有利）",
-                     text_color="gray", font=("Meiryo", 9)).pack(anchor="w")
+        ttk.Label(sort_hint,
+                  text="列ヘッダをクリックでソート  ／  デフォルト: 先攻勝率（低い順）"
+                       "  ／  後攻有利%: 後攻プレイヤーが勝つ確率（50%超＝後攻有利）",
+                  foreground="gray").pack(anchor="w")
 
-        tree_frame = ctk.CTkFrame(self.frame, fg_color="transparent")
+        tree_frame = ttk.Frame(self.frame)
         tree_frame.pack(fill="both", expand=True, padx=6, pady=(2, 6))
 
         cols = [c[0] for c in _COL_CFG]
@@ -143,7 +138,7 @@ class MatchupTab:
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="left", fill="y")
 
-        self.count_label = ctk.CTkLabel(self.frame, text="", font=_FONT)
+        self.count_label = ttk.Label(self.frame, text="")
         self.count_label.pack(anchor="w", padx=10, pady=(0, 4))
 
     # ── Logic ─────────────────────────────────────────────────────────────────

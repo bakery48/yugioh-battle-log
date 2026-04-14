@@ -7,7 +7,6 @@ import time
 import math
 import json
 import os
-import customtkinter as ctk
 
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               "color_monitor", "settings.json")
@@ -280,14 +279,14 @@ class _MonitorThread(threading.Thread):
 
 class ColorMonitorTab:
     def __init__(self, parent: tk.Widget):
-        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame = ttk.Frame(parent)
         self.frame.pack(fill="both", expand=True)
 
         if not _DEPS_OK:
-            ctk.CTkLabel(
+            ttk.Label(
                 self.frame,
                 text="Pillow と pywin32 が必要です。\npip install Pillow pywin32",
-                text_color="red", justify="center", font=_FONT,
+                foreground="red", justify="center", font=_FONT,
             ).pack(expand=True, pady=40)
             return
 
@@ -304,7 +303,7 @@ class ColorMonitorTab:
     # ── UI ────────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
-        outer = ctk.CTkFrame(self.frame, fg_color="transparent")
+        outer = ttk.Frame(self.frame)
         outer.pack(fill="both", expand=True, padx=4, pady=4)
 
         _canvas = tk.Canvas(outer, highlightthickness=0)
@@ -313,7 +312,7 @@ class ColorMonitorTab:
         _vsb.pack(side="right", fill="y")
         _canvas.pack(side="left", fill="both", expand=True)
 
-        scroll = ctk.CTkFrame(_canvas, fg_color="transparent")
+        scroll = ttk.Frame(_canvas)
         _win = _canvas.create_window((0, 0), window=scroll, anchor="nw")
         scroll.bind("<Configure>",
                     lambda e: _canvas.configure(
@@ -325,120 +324,105 @@ class ColorMonitorTab:
                          int(-e.delta / 120), "units"))
 
         # ── ウィンドウ選択 ────────────────────────────────────────────────────
-        wf = ctk.CTkFrame(scroll, border_width=1)
+        wf = ttk.LabelFrame(scroll, text="監視対象ウィンドウ", padding=6)
         wf.pack(fill="x", pady=(0, 6))
-        ctk.CTkLabel(wf, text="監視対象ウィンドウ", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
-        row = ctk.CTkFrame(wf, fg_color="transparent")
-        row.pack(fill="x", padx=8, pady=(0, 6))
-        self.win_combo = ctk.CTkComboBox(row, width=420, font=_FONT,
-                                          dropdown_font=_FONT,
-                                          command=self._on_window_select)
+        row = ttk.Frame(wf)
+        row.pack(fill="x")
+        self.win_combo = ttk.Combobox(row, width=55, font=_FONT, state="readonly")
         self.win_combo.pack(side="left", padx=(0, 6))
-        ctk.CTkButton(row, text="🔄 更新", command=self._refresh_windows,
-                      width=80, font=_FONT).pack(side="left")
+        self.win_combo.bind("<<ComboboxSelected>>",
+                            lambda e: self._on_window_select(self.win_combo.get()))
+        ttk.Button(row, text="🔄 更新", command=self._refresh_windows,
+                   width=8).pack(side="left")
         self._refresh_windows()
 
         # ── 監視領域 ──────────────────────────────────────────────────────────
-        rf = ctk.CTkFrame(scroll, border_width=1)
+        rf = ttk.LabelFrame(scroll, text="監視領域  ※ウィンドウ内の相対座標",
+                            padding=6)
         rf.pack(fill="x", pady=(0, 6))
-        ctk.CTkLabel(rf, text="監視領域  ※ウィンドウ内の相対座標",
-                     font=_FONT_BOLD).pack(anchor="w", padx=8, pady=(4, 2))
-        row2 = ctk.CTkFrame(rf, fg_color="transparent")
-        row2.pack(fill="x", padx=8, pady=(0, 6))
-        self.region_label = ctk.CTkLabel(row2, text="未設定",
-                                          text_color="gray", width=280, font=_FONT,
-                                          anchor="w")
+        row2 = ttk.Frame(rf)
+        row2.pack(fill="x")
+        self.region_label = ttk.Label(row2, text="未設定", foreground="gray",
+                                      width=38, font=_FONT, anchor="w")
         self.region_label.pack(side="left", padx=(0, 8))
-        ctk.CTkButton(row2, text="🖱 ドラッグで選択",
-                      command=self._pick_region, width=130,
-                      font=_FONT).pack(side="left")
+        ttk.Button(row2, text="🖱 ドラッグで選択",
+                   command=self._pick_region, width=16).pack(side="left")
 
         # ── 色設定 ────────────────────────────────────────────────────────────
-        cf = ctk.CTkFrame(scroll, border_width=1)
+        cf = ttk.LabelFrame(scroll, text="色設定", padding=6)
         cf.pack(fill="x", pady=(0, 6))
-        ctk.CTkLabel(cf, text="色設定", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
-        colors_row = ctk.CTkFrame(cf, fg_color="transparent")
-        colors_row.pack(fill="x", padx=8, pady=(0, 6))
+        colors_row = ttk.Frame(cf)
+        colors_row.pack(fill="x")
 
         for col, (which, label) in enumerate((("start", "開始色（変化前）"),
                                                ("end",   "終了色（変化後）"))):
-            sf = ctk.CTkFrame(colors_row, border_width=1)
+            sf = ttk.LabelFrame(colors_row, text=label, padding=6)
             sf.grid(row=0, column=col, padx=(0, 16), sticky="w")
-            ctk.CTkLabel(sf, text=label, font=_FONT_BOLD).pack(
-                anchor="w", padx=6, pady=(4, 2))
-            top_row = ctk.CTkFrame(sf, fg_color="transparent")
-            top_row.pack(anchor="w", padx=6)
-            # tk.Canvas for actual color swatch (CTk doesn't support bg colors easily)
+            top_row = ttk.Frame(sf)
+            top_row.pack(anchor="w")
             canvas = tk.Canvas(top_row, width=36, height=24,
                                relief="sunken", bd=1)
             canvas.pack(side="left", padx=(0, 6))
-            lbl = ctk.CTkLabel(top_row, text="未設定", width=80, font=_FONT)
+            lbl = ttk.Label(top_row, text="未設定", width=10, font=_FONT)
             lbl.pack(side="left")
             if which == "start":
                 self.start_canvas, self.start_label = canvas, lbl
             else:
                 self.end_canvas,   self.end_label   = canvas, lbl
-            btn_row2 = ctk.CTkFrame(sf, fg_color="transparent")
-            btn_row2.pack(anchor="w", padx=6, pady=(4, 6))
-            ctk.CTkButton(btn_row2, text="スクリーンから取得",
-                          command=lambda w=which: self._pick_color(w),
-                          width=140, font=_FONT).pack(side="left", padx=(0, 4))
-            ctk.CTkButton(btn_row2, text="ダイアログ",
-                          command=lambda w=which: self._pick_color_dialog(w),
-                          width=90, font=_FONT).pack(side="left")
+            btn_row2 = ttk.Frame(sf)
+            btn_row2.pack(anchor="w", pady=(4, 0))
+            ttk.Button(btn_row2, text="スクリーンから取得",
+                       command=lambda w=which: self._pick_color(w),
+                       width=16).pack(side="left", padx=(0, 4))
+            ttk.Button(btn_row2, text="ダイアログ",
+                       command=lambda w=which: self._pick_color_dialog(w),
+                       width=10).pack(side="left")
 
         # ── パラメータ ────────────────────────────────────────────────────────
-        pf = ctk.CTkFrame(scroll, border_width=1)
+        pf = ttk.LabelFrame(scroll, text="監視パラメータ", padding=6)
         pf.pack(fill="x", pady=(0, 6))
-        ctk.CTkLabel(pf, text="監視パラメータ", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
-        param_row = ctk.CTkFrame(pf, fg_color="transparent")
-        param_row.pack(fill="x", padx=8, pady=(0, 6))
+        param_row = ttk.Frame(pf)
+        param_row.pack(fill="x")
 
-        ctk.CTkLabel(param_row, text="色一致の閾値 (%):", font=_FONT).grid(
+        ttk.Label(param_row, text="色一致の閾値 (%):", font=_FONT).grid(
             row=0, column=0, sticky="w", padx=(0, 6))
         self.threshold_var = tk.DoubleVar(value=10.0)
-        ctk.CTkSlider(param_row, from_=1, to=50, variable=self.threshold_var,
-                      orientation="horizontal", width=180,
-                      command=self._on_threshold_change).grid(row=0, column=1)
-        self.threshold_disp = ctk.CTkLabel(param_row, text="10.0%", width=50,
-                                            font=_FONT)
+        ttk.Scale(param_row, from_=1, to=50, variable=self.threshold_var,
+                  orient="horizontal", length=180,
+                  command=self._on_threshold_change).grid(row=0, column=1)
+        self.threshold_disp = ttk.Label(param_row, text="10.0%", width=6,
+                                        font=_FONT)
         self.threshold_disp.grid(row=0, column=2, padx=(6, 24))
 
-        ctk.CTkLabel(param_row, text="検知後の待機時間 (秒):", font=_FONT).grid(
+        ttk.Label(param_row, text="検知後の待機時間 (秒):", font=_FONT).grid(
             row=0, column=3, sticky="w", padx=(0, 6))
         self.wait_var = tk.StringVar(value="3")
-        ctk.CTkEntry(param_row, textvariable=self.wait_var, width=60,
-                     font=_FONT).grid(row=0, column=4)
+        ttk.Entry(param_row, textvariable=self.wait_var, width=6,
+                  font=_FONT).grid(row=0, column=4)
 
         # ── 状態 ──────────────────────────────────────────────────────────────
-        sf2 = ctk.CTkFrame(scroll, border_width=1)
+        sf2 = ttk.LabelFrame(scroll, text="状態", padding=6)
         sf2.pack(fill="x", pady=(0, 6))
-        ctk.CTkLabel(sf2, text="状態", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
-        row3 = ctk.CTkFrame(sf2, fg_color="transparent")
-        row3.pack(fill="x", padx=8, pady=(0, 6))
-        self.status_label = ctk.CTkLabel(row3, text="● 停止中",
-                                          text_color="gray", width=90, font=_FONT)
+        row3 = ttk.Frame(sf2)
+        row3.pack(fill="x")
+        self.status_label = ttk.Label(row3, text="● 停止中",
+                                      foreground="gray", width=12, font=_FONT)
         self.status_label.pack(side="left", padx=(0, 16))
-        self.color_preview = ctk.CTkLabel(row3, text="現在色: ─", font=_FONT)
+        self.color_preview = ttk.Label(row3, text="現在色: ─", font=_FONT)
         self.color_preview.pack(side="left")
         self.cur_color_canvas = tk.Canvas(row3, width=28, height=20,
                                           relief="sunken", bd=1)
         self.cur_color_canvas.pack(side="left", padx=(6, 0))
 
         # ── 操作ボタン ────────────────────────────────────────────────────────
-        bf = ctk.CTkFrame(scroll, fg_color="transparent")
+        bf = ttk.Frame(scroll)
         bf.pack(fill="x", pady=(4, 0))
-        self.start_btn = ctk.CTkButton(bf, text="▶ 監視開始",
-                                        command=self._start_monitor,
-                                        width=110, font=_FONT)
+        self.start_btn = ttk.Button(bf, text="▶ 監視開始",
+                                    command=self._start_monitor, width=12)
         self.start_btn.pack(side="left", padx=(0, 8))
-        self.stop_btn = ctk.CTkButton(bf, text="■ 停止",
-                                       command=self._stop_monitor,
-                                       width=80, font=_FONT, state="disabled")
+        self.stop_btn = ttk.Button(bf, text="■ 停止",
+                                   command=self._stop_monitor,
+                                   width=8, state="disabled")
         self.stop_btn.pack(side="left")
 
         self._update_color_preview()
@@ -449,7 +433,7 @@ class ColorMonitorTab:
         wins = _get_all_windows()
         self._windows_list = wins
         values = [f"{hwnd}  │  {t[:60]}" for hwnd, t in wins]
-        self.win_combo.configure(values=values)
+        self.win_combo["values"] = values
         if match_title:
             for i, (_, t) in enumerate(wins):
                 if match_title in t or t in match_title:
@@ -487,14 +471,14 @@ class ColorMonitorTab:
                 self.region = (rx1, ry1, rx1 + w, ry1 + h)
                 self.region_label.configure(
                     text=f"相対座標 ({rx1}, {ry1})  サイズ {w}×{h}",
-                    text_color=ctk.ThemeManager.theme["CTkLabel"]["text_color"])
+                    foreground="")
                 return
             except Exception:
                 pass
         self.region = abs_region
         self.region_label.configure(
             text=f"絶対座標 ({ax1},{ay1})→({ax2},{ay2})",
-            text_color="orange")
+            foreground="orange")
 
     # ── 色選択 ────────────────────────────────────────────────────────────────
 
@@ -560,14 +544,14 @@ class ColorMonitorTab:
             lambda: self.frame.after(0, self._show_alert),
         )
         self._monitor_thread.start()
-        self.status_label.configure(text="● 監視中", text_color="green")
+        self.status_label.configure(text="● 監視中", foreground="green")
         self.start_btn.configure(state="disabled")
         self.stop_btn.configure(state="normal")
 
     def _stop_monitor(self):
         if self._monitor_thread:
             self._monitor_thread.stop()
-        self.status_label.configure(text="● 停止中", text_color="gray")
+        self.status_label.configure(text="● 停止中", foreground="gray")
         self.start_btn.configure(state="normal")
         self.stop_btn.configure(state="disabled")
 

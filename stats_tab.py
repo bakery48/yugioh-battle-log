@@ -2,7 +2,6 @@
 
 import tkinter as tk
 from tkinter import ttk
-import customtkinter as ctk
 
 import database as db
 from constants import RANKS
@@ -21,7 +20,7 @@ def _pct(num: int, denom: int) -> str:
 
 class StatsTab:
     def __init__(self, parent: tk.Widget):
-        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame = ttk.Frame(parent)
         self.frame.pack(fill="both", expand=True)
         self._decks: list = []
         self._tags: list = []
@@ -34,44 +33,42 @@ class StatsTab:
 
     def _build_ui(self) -> None:
         # ── Filter panel ──────────────────────────────────────────────────────
-        filter_outer = ctk.CTkFrame(self.frame, border_width=1)
+        filter_outer = ttk.LabelFrame(self.frame, text="フィルタ", padding=6)
         filter_outer.pack(fill="x", padx=6, pady=(6, 2))
-        ctk.CTkLabel(filter_outer, text="フィルタ", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
 
-        filter_frame = ctk.CTkFrame(filter_outer, fg_color="transparent")
+        filter_frame = ttk.Frame(filter_outer)
         filter_frame.pack(fill="x", padx=8, pady=(0, 8))
 
         # Row 0 – date range
-        ctk.CTkLabel(filter_frame, text="期間:", font=_FONT).grid(
+        ttk.Label(filter_frame, text="期間:").grid(
             row=0, column=0, sticky="e", padx=(0, 4), pady=3)
         self.date_from_var = tk.StringVar()
-        ctk.CTkEntry(filter_frame, textvariable=self.date_from_var, width=110,
-                     font=_FONT).grid(row=0, column=1, padx=2)
-        ctk.CTkLabel(filter_frame, text="～", font=_FONT).grid(row=0, column=2)
+        ttk.Entry(filter_frame, textvariable=self.date_from_var, width=12).grid(
+            row=0, column=1, padx=2)
+        ttk.Label(filter_frame, text="～").grid(row=0, column=2)
         self.date_to_var = tk.StringVar()
-        ctk.CTkEntry(filter_frame, textvariable=self.date_to_var, width=110,
-                     font=_FONT).grid(row=0, column=3, padx=2)
-        ctk.CTkLabel(filter_frame, text="YYYY-MM-DD", text_color="gray",
-                     font=_FONT).grid(row=0, column=4, padx=6)
+        ttk.Entry(filter_frame, textvariable=self.date_to_var, width=12).grid(
+            row=0, column=3, padx=2)
+        ttk.Label(filter_frame, text="YYYY-MM-DD", foreground="gray").grid(
+            row=0, column=4, padx=6)
 
         # Row 1 – ranks
-        ctk.CTkLabel(filter_frame, text="ランク:", font=_FONT).grid(
+        ttk.Label(filter_frame, text="ランク:").grid(
             row=1, column=0, sticky="e", padx=(0, 4), pady=3)
-        rank_inner = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        rank_inner = ttk.Frame(filter_frame)
         rank_inner.grid(row=1, column=1, columnspan=6, sticky="w")
         self.rank_vars: dict = {}
         for rank in RANKS:
             var = tk.BooleanVar()
             self.rank_vars[rank] = var
-            ctk.CTkCheckBox(rank_inner, text=rank, variable=var,
-                            font=_FONT, width=56).pack(side="left", padx=3)
+            ttk.Checkbutton(rank_inner, text=rank, variable=var).pack(
+                side="left", padx=3)
 
-        # Row 2 – deck & tag multi-select (keep tk.Listbox — no CTk equivalent)
-        ctk.CTkLabel(filter_frame, text="使用デッキ:", font=_FONT).grid(
+        # Row 2 – deck & tag multi-select (keep tk.Listbox — no ttk equivalent)
+        ttk.Label(filter_frame, text="使用デッキ:").grid(
             row=2, column=0, sticky="ne", padx=(0, 4), pady=3)
 
-        deck_frame = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        deck_frame = ttk.Frame(filter_frame)
         deck_frame.grid(row=2, column=1, columnspan=3, sticky="w", pady=3)
         self.deck_listbox = tk.Listbox(
             deck_frame, selectmode="multiple", height=5, width=26,
@@ -82,9 +79,9 @@ class StatsTab:
         self.deck_listbox.pack(side="left")
         dsb.pack(side="left", fill="y")
 
-        ctk.CTkLabel(filter_frame, text="タグ:", font=_FONT).grid(
+        ttk.Label(filter_frame, text="タグ:").grid(
             row=2, column=4, sticky="ne", padx=(14, 4), pady=3)
-        tag_frame = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        tag_frame = ttk.Frame(filter_frame)
         tag_frame.grid(row=2, column=5, columnspan=3, sticky="w", pady=3)
         self.tag_listbox = tk.Listbox(
             tag_frame, selectmode="multiple", height=5, width=22,
@@ -95,24 +92,22 @@ class StatsTab:
         self.tag_listbox.pack(side="left")
         tsb.pack(side="left", fill="y")
 
-        ctk.CTkLabel(filter_frame, text="※ Ctrl+クリックで複数選択",
-                     text_color="gray", font=_FONT).grid(
+        ttk.Label(filter_frame, text="※ Ctrl+クリックで複数選択",
+                  foreground="gray").grid(
             row=3, column=1, columnspan=7, sticky="w")
 
         # Row 4 – buttons
-        btn_row = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        btn_row = ttk.Frame(filter_frame)
         btn_row.grid(row=4, column=0, columnspan=8, pady=(6, 2))
-        ctk.CTkButton(btn_row, text="集計", command=self.calculate,
-                      width=80, font=_FONT).pack(side="left", padx=6)
-        ctk.CTkButton(btn_row, text="リセット", command=self.reset,
-                      width=80, font=_FONT).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="集計", command=self.calculate).pack(
+            side="left", padx=6)
+        ttk.Button(btn_row, text="リセット", command=self.reset).pack(
+            side="left", padx=6)
 
         # ── Result area ───────────────────────────────────────────────────────
-        result_outer = ctk.CTkFrame(self.frame, border_width=1)
+        result_outer = ttk.LabelFrame(self.frame, text="集計結果", padding=6)
         result_outer.pack(fill="both", expand=True, padx=6, pady=6)
-        ctk.CTkLabel(result_outer, text="集計結果", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
-        self.result_frame = ctk.CTkFrame(result_outer, fg_color="transparent")
+        self.result_frame = ttk.Frame(result_outer)
         self.result_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
         self._show_placeholder()
@@ -122,10 +117,10 @@ class StatsTab:
     def _show_placeholder(self) -> None:
         for w in self.result_frame.winfo_children():
             w.destroy()
-        ctk.CTkLabel(
+        ttk.Label(
             self.result_frame,
             text="フィルタを設定して「集計」ボタンを押してください。",
-            text_color="gray", font=_FONT,
+            foreground="gray",
         ).pack(pady=30)
 
     def _get_filters(self) -> dict:
@@ -183,10 +178,10 @@ class StatsTab:
             w.destroy()
 
         if not battles:
-            ctk.CTkLabel(
+            ttk.Label(
                 self.result_frame,
                 text="該当する戦績がありません。",
-                text_color="gray", font=_FONT,
+                foreground="gray",
             ).pack(pady=30)
             return
 
@@ -200,9 +195,9 @@ class StatsTab:
         second_wins = sum(1 for b in second if b["result"] == "勝利")
 
         # Summary
-        summary = ctk.CTkFrame(self.result_frame, fg_color="transparent")
+        summary = ttk.Frame(self.result_frame)
         summary.pack(pady=(4, 10))
-        ctk.CTkLabel(
+        ttk.Label(
             summary,
             text=(f"総試合数  {total} 試合　　"
                   f"{wins} 勝 {losses} 敗　　総合勝率 {_pct(wins, total)}"),
@@ -213,7 +208,7 @@ class StatsTab:
             fill="x", padx=20, pady=4)
 
         # Stats table (tk.Label for per-cell background colors)
-        tbl = ctk.CTkFrame(self.result_frame, fg_color="transparent")
+        tbl = ttk.Frame(self.result_frame)
         tbl.pack()
 
         headers    = ["区分", "試合数", "勝利", "敗北", "勝率", "比率（先後攻率）"]

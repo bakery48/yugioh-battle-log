@@ -4,7 +4,6 @@ import json
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox
-import customtkinter as ctk
 
 import database as db
 from battle_dialog import BattleDialog
@@ -35,7 +34,7 @@ def _save_prefs(prefs: dict) -> None:
 
 class BattleTab:
     def __init__(self, parent: tk.Widget):
-        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame = ttk.Frame(parent)
         self.frame.pack(fill="both", expand=True)
         self._battles: list = []
         prefs = _load_prefs()
@@ -48,47 +47,45 @@ class BattleTab:
 
     def _build_ui(self) -> None:
         # ── Filter bar ────────────────────────────────────────────────────────
-        filter_outer = ctk.CTkFrame(self.frame, border_width=1)
+        filter_outer = ttk.LabelFrame(self.frame, text="フィルタ", padding=6)
         filter_outer.pack(fill="x", padx=6, pady=(6, 2))
-        ctk.CTkLabel(filter_outer, text="フィルタ", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
 
-        filter_frame = ctk.CTkFrame(filter_outer, fg_color="transparent")
+        filter_frame = ttk.Frame(filter_outer)
         filter_frame.pack(fill="x", padx=8, pady=(0, 6))
 
-        ctk.CTkLabel(filter_frame, text="期間:", font=_FONT).grid(
+        ttk.Label(filter_frame, text="期間:").grid(
             row=0, column=0, padx=(0, 4), pady=4)
         self.date_from_var = tk.StringVar()
-        ctk.CTkEntry(filter_frame, textvariable=self.date_from_var, width=110,
-                     font=_FONT).grid(row=0, column=1, padx=2)
-        ctk.CTkLabel(filter_frame, text="～", font=_FONT).grid(row=0, column=2)
+        ttk.Entry(filter_frame, textvariable=self.date_from_var, width=12).grid(
+            row=0, column=1, padx=2)
+        ttk.Label(filter_frame, text="～").grid(row=0, column=2)
         self.date_to_var = tk.StringVar()
-        ctk.CTkEntry(filter_frame, textvariable=self.date_to_var, width=110,
-                     font=_FONT).grid(row=0, column=3, padx=2)
-        ctk.CTkLabel(filter_frame, text="YYYY-MM-DD",
-                     text_color="gray", font=_FONT).grid(row=0, column=4, padx=6)
+        ttk.Entry(filter_frame, textvariable=self.date_to_var, width=12).grid(
+            row=0, column=3, padx=2)
+        ttk.Label(filter_frame, text="YYYY-MM-DD",
+                  foreground="gray").grid(row=0, column=4, padx=6)
 
-        ctk.CTkFrame(filter_frame, width=1, fg_color="gray").grid(
+        ttk.Separator(filter_frame, orient="vertical").grid(
             row=0, column=5, sticky="ns", padx=8)
 
-        ctk.CTkLabel(filter_frame, text="ランク:", font=_FONT).grid(
+        ttk.Label(filter_frame, text="ランク:").grid(
             row=0, column=6, padx=(0, 4))
-        rank_inner = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        rank_inner = ttk.Frame(filter_frame)
         rank_inner.grid(row=0, column=7)
         self.rank_vars: dict = {}
         for rank in RANKS:
             var = tk.BooleanVar()
             self.rank_vars[rank] = var
-            ctk.CTkCheckBox(rank_inner, text=rank, variable=var,
-                            font=_FONT, width=56).pack(side="left", padx=2)
+            ttk.Checkbutton(rank_inner, text=rank, variable=var).pack(
+                side="left", padx=2)
 
-        ctk.CTkButton(filter_frame, text="絞り込み", command=self.load_battles,
-                      width=80, font=_FONT).grid(row=0, column=8, padx=(12, 2))
-        ctk.CTkButton(filter_frame, text="リセット", command=self.reset_filters,
-                      width=64, font=_FONT).grid(row=0, column=9, padx=2)
+        ttk.Button(filter_frame, text="絞り込み",
+                   command=self.load_battles).grid(row=0, column=8, padx=(12, 2))
+        ttk.Button(filter_frame, text="リセット",
+                   command=self.reset_filters).grid(row=0, column=9, padx=2)
 
         # ── Treeview ──────────────────────────────────────────────────────────
-        tree_frame = ctk.CTkFrame(self.frame, fg_color="transparent")
+        tree_frame = ttk.Frame(self.frame)
         tree_frame.pack(fill="both", expand=True, padx=6, pady=4)
 
         columns = (
@@ -124,20 +121,20 @@ class BattleTab:
         self.tree.bind("<Double-1>", lambda _: self.edit_battle())
 
         # ── Bottom bar ────────────────────────────────────────────────────────
-        bottom = ctk.CTkFrame(self.frame, fg_color="transparent")
+        bottom = ttk.Frame(self.frame)
         bottom.pack(fill="x", padx=6, pady=(0, 6))
 
-        self.count_label = ctk.CTkLabel(bottom, text="0 件", font=_FONT)
+        self.count_label = ttk.Label(bottom, text="0 件")
         self.count_label.pack(side="left", padx=4)
 
-        ctk.CTkButton(bottom, text="削除", command=self.delete_battle,
-                      width=60, font=_FONT).pack(side="right", padx=4)
-        ctk.CTkButton(bottom, text="編集", command=self.edit_battle,
-                      width=60, font=_FONT).pack(side="right", padx=4)
-        ctk.CTkButton(bottom, text="＋ 追加", command=self.add_battle,
-                      width=80, font=_FONT).pack(side="right", padx=4)
-        ctk.CTkButton(bottom, text="一括置換", command=self._open_replace_dialog,
-                      width=76, font=_FONT).pack(side="right", padx=4)
+        ttk.Button(bottom, text="削除",
+                   command=self.delete_battle).pack(side="right", padx=4)
+        ttk.Button(bottom, text="編集",
+                   command=self.edit_battle).pack(side="right", padx=4)
+        ttk.Button(bottom, text="＋ 追加",
+                   command=self.add_battle).pack(side="right", padx=4)
+        ttk.Button(bottom, text="一括置換",
+                   command=self._open_replace_dialog).pack(side="right", padx=4)
 
         self._sort_col: str = "date"
         self._sort_rev: bool = True

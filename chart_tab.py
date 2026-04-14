@@ -3,8 +3,6 @@
 import tkinter as tk
 from tkinter import ttk
 from collections import Counter
-import customtkinter as ctk
-
 import database as db
 from constants import RANKS, MPL_FONT_CANDIDATES
 
@@ -38,7 +36,7 @@ OTHERS_THRESHOLD = 0.05
 
 class ChartTab:
     def __init__(self, parent: tk.Widget):
-        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame = ttk.Frame(parent)
         self.frame.pack(fill="both", expand=True)
         self._build_ui()
 
@@ -46,55 +44,53 @@ class ChartTab:
 
     def _build_ui(self) -> None:
         if not MPL_OK:
-            ctk.CTkLabel(
+            ttk.Label(
                 self.frame,
                 text=("matplotlib がインストールされていません。\n"
                       "pip install matplotlib を実行してから再起動してください。"),
-                text_color="red", font=_FONT,
+                foreground="red", font=_FONT,
             ).pack(pady=50)
             return
 
         # ── Filter panel ──────────────────────────────────────────────────────
-        filter_outer = ctk.CTkFrame(self.frame, border_width=1)
+        filter_outer = ttk.LabelFrame(self.frame, text="フィルタ", padding=6)
         filter_outer.pack(fill="x", padx=6, pady=(6, 2))
-        ctk.CTkLabel(filter_outer, text="フィルタ", font=_FONT_BOLD).pack(
-            anchor="w", padx=8, pady=(4, 2))
 
-        filter_frame = ctk.CTkFrame(filter_outer, fg_color="transparent")
-        filter_frame.pack(fill="x", padx=8, pady=(0, 8))
+        filter_frame = ttk.Frame(filter_outer)
+        filter_frame.pack(fill="x")
 
-        ctk.CTkLabel(filter_frame, text="期間:", font=_FONT).grid(
+        ttk.Label(filter_frame, text="期間:", font=_FONT).grid(
             row=0, column=0, sticky="e", padx=(0, 4))
         self.date_from_var = tk.StringVar()
-        ctk.CTkEntry(filter_frame, textvariable=self.date_from_var, width=110,
-                     font=_FONT).grid(row=0, column=1, padx=2)
-        ctk.CTkLabel(filter_frame, text="～", font=_FONT).grid(row=0, column=2)
+        ttk.Entry(filter_frame, textvariable=self.date_from_var, width=13,
+                  font=_FONT).grid(row=0, column=1, padx=2)
+        ttk.Label(filter_frame, text="～", font=_FONT).grid(row=0, column=2)
         self.date_to_var = tk.StringVar()
-        ctk.CTkEntry(filter_frame, textvariable=self.date_to_var, width=110,
-                     font=_FONT).grid(row=0, column=3, padx=2)
-        ctk.CTkLabel(filter_frame, text="YYYY-MM-DD", text_color="gray",
-                     font=_FONT).grid(row=0, column=4, padx=6)
+        ttk.Entry(filter_frame, textvariable=self.date_to_var, width=13,
+                  font=_FONT).grid(row=0, column=3, padx=2)
+        ttk.Label(filter_frame, text="YYYY-MM-DD", foreground="gray",
+                  font=_FONT).grid(row=0, column=4, padx=6)
 
-        ctk.CTkLabel(filter_frame, text="ランク:", font=_FONT).grid(
+        ttk.Label(filter_frame, text="ランク:", font=_FONT).grid(
             row=1, column=0, sticky="e", padx=(0, 4), pady=4)
-        rank_inner = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        rank_inner = ttk.Frame(filter_frame)
         rank_inner.grid(row=1, column=1, columnspan=6, sticky="w")
         self.rank_vars: dict = {}
         for rank in RANKS:
             var = tk.BooleanVar()
             self.rank_vars[rank] = var
-            ctk.CTkCheckBox(rank_inner, text=rank, variable=var,
-                            font=_FONT, width=56).pack(side="left", padx=3)
+            ttk.Checkbutton(rank_inner, text=rank, variable=var).pack(
+                side="left", padx=3)
 
-        btn_row = ctk.CTkFrame(filter_frame, fg_color="transparent")
+        btn_row = ttk.Frame(filter_frame)
         btn_row.grid(row=2, column=0, columnspan=7, pady=(6, 2))
-        ctk.CTkButton(btn_row, text="グラフ表示", command=self.draw_chart,
-                      width=100, font=_FONT).pack(side="left", padx=6)
-        ctk.CTkButton(btn_row, text="リセット", command=self.reset,
-                      width=80, font=_FONT).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="グラフ表示", command=self.draw_chart,
+                   width=12).pack(side="left", padx=6)
+        ttk.Button(btn_row, text="リセット", command=self.reset,
+                   width=8).pack(side="left", padx=6)
 
         # ── Chart canvas ──────────────────────────────────────────────────────
-        canvas_frame = ctk.CTkFrame(self.frame, fg_color="transparent")
+        canvas_frame = ttk.Frame(self.frame)
         canvas_frame.pack(fill="both", expand=True, padx=6, pady=6)
 
         self.fig = Figure(dpi=100)

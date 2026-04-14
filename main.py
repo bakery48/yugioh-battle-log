@@ -3,10 +3,9 @@
 import sys
 import os
 
-# Ensure the app directory is on the path when bundled or double-clicked
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import customtkinter as ctk
+import tkinter as tk
 import subprocess
 import database
 from main_window import MainWindow
@@ -36,10 +35,7 @@ def main() -> None:
 
     database.init_db()
 
-    ctk.set_appearance_mode("light")
-    ctk.set_default_color_theme("blue")
-
-    root = ctk.CTk()
+    root = tk.Tk()
     root.title(f"遊戯王マスターデュエル 戦績管理  [commit:{git_hash}]")
     root.geometry("1200x760")
     root.minsize(960, 620)
@@ -51,9 +47,6 @@ def main() -> None:
         except Exception:
             pass
 
-    # CTkEntry  → internal ttk.Entry  (class "TEntry")
-    # CTkComboBox → internal tk.Entry (class "Entry")
-    # Both need the IME font fix.
     for _cls in ("TEntry", "Entry"):
         root.bind_class(_cls, "<FocusIn>",
                         lambda e: fix_entry_ime_font(e.widget),
@@ -61,9 +54,6 @@ def main() -> None:
 
     MainWindow(root)
     root.mainloop()
-    # mainloop が返った後、CTk ウィジェットの GC による破棄を待たずに即終了。
-    # root.quit() だけだと GC が __del__ で全ウィジェットを destroy しようとして
-    # 他のアプリも止まるほど CPU を使う。os._exit はスレッドを含め即座に終了する。
     os._exit(0)
 
 
