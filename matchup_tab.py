@@ -118,7 +118,7 @@ class MatchupTab:
             self.tree.heading(col_id, text=header,
                               command=lambda c=col_id: self._sort_by(c))
             self.tree.column(col_id, width=width, anchor=anchor,
-                             stretch=stretch, minwidth=width)
+                             stretch=stretch, minwidth=30)
 
         vsb = ttk.Scrollbar(tree_frame, orient="vertical",
                             command=self.tree.yview)
