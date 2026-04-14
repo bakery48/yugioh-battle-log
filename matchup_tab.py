@@ -1,4 +1,4 @@
-"""Matchup analysis tab – win rates vs each opponent deck."""
+"""Matchup analysis tab – win rates vs each opponent deck, or by own deck."""
 
 import tkinter as tk
 from tkinter import ttk
@@ -12,15 +12,18 @@ _FONT      = ("Meiryo", 10)
 _FONT_BOLD = ("Meiryo", 10, "bold")
 
 _COL_CFG = [
-    # (column_id,  header,       width, anchor)
-    ("deck",       "相手デッキ", 160,   "w"),
-    ("total_n",    "総合試合",   60,    "center"),
-    ("total_wr",   "総合勝率",   72,    "center"),
-    ("first_n",    "先攻試合",   60,    "center"),
-    ("first_wr",   "先攻勝率",   72,    "center"),
-    ("second_n",   "後攻試合",   60,    "center"),
-    ("second_wr",  "後攻勝率",   72,    "center"),
+    # (column_id,   header,       width, anchor)
+    ("deck",        "相手デッキ", 160,   "w"),
+    ("total_n",     "総合試合",    60,   "center"),
+    ("total_wr",    "総合勝率",    72,   "center"),
+    ("first_n",     "先攻試合",    60,   "center"),
+    ("first_wr",    "先攻勝率",    72,   "center"),
+    ("second_n",    "後攻試合",    60,   "center"),
+    ("second_wr",   "後攻勝率",    72,   "center"),
+    ("second_adv",  "後攻有利%",   72,   "center"),
 ]
+
+_WR_COLS = {"first_wr", "second_wr", "total_wr", "second_adv"}
 
 
 def _pct(wins: int, total: int) -> str:
@@ -41,7 +44,7 @@ class MatchupTab:
     def __init__(self, parent: tk.Widget):
         self.frame = ctk.CTkFrame(parent, fg_color="transparent")
         self.frame.pack(fill="both", expand=True)
-        self._rows: list = []          # 表示中の行データ (dict)
+        self._rows: list = []
         self._sort_col: str = "first_wr"
         self._sort_rev: bool = False   # 苦手順 = 昇順
         self._build_ui()
@@ -91,11 +94,24 @@ class MatchupTab:
                      font=_FONT).grid(row=2, column=1, sticky="w")
         ctk.CTkLabel(ff, text="戦以上を表示", text_color="gray",
                      font=_FONT).grid(row=2, column=2, columnspan=2,
-                                       sticky="w", padx=2)
+                                      sticky="w", padx=2)
+
+        # 分析軸
+        ctk.CTkLabel(ff, text="分析軸:", font=_FONT).grid(
+            row=3, column=0, sticky="e", padx=(0, 4), pady=3)
+        self._axis_var = tk.StringVar(value="opponent")
+        axis_inner = ctk.CTkFrame(ff, fg_color="transparent")
+        axis_inner.grid(row=3, column=1, columnspan=6, sticky="w")
+        ctk.CTkRadioButton(axis_inner, text="相手デッキ別",
+                           variable=self._axis_var, value="opponent",
+                           font=_FONT).pack(side="left", padx=(0, 16))
+        ctk.CTkRadioButton(axis_inner, text="自デッキ別",
+                           variable=self._axis_var, value="own",
+                           font=_FONT).pack(side="left")
 
         # ボタン
         btn_row = ctk.CTkFrame(ff, fg_color="transparent")
-        btn_row.grid(row=3, column=0, columnspan=7, pady=(6, 0))
+        btn_row.grid(row=4, column=0, columnspan=7, pady=(6, 0))
         ctk.CTkButton(btn_row, text="集計", command=self.calculate,
                       width=80, font=_FONT).pack(side="left", padx=6)
         ctk.CTkButton(btn_row, text="リセット", command=self.reset,
@@ -105,7 +121,8 @@ class MatchupTab:
         sort_hint = ctk.CTkFrame(self.frame, fg_color="transparent")
         sort_hint.pack(fill="x", padx=8, pady=(4, 0))
         ctk.CTkLabel(sort_hint,
-                     text="列ヘッダをクリックでソート  ／  デフォルト: 先攻勝率（低い順）",
+                     text="列ヘッダをクリックでソート  ／  デフォルト: 先攻勝率（低い順）"
+                          "  ／  後攻有利%: 後攻プレイヤーが勝つ確率（50%超＝後攻有利）",
                      text_color="gray", font=("Meiryo", 9)).pack(anchor="w")
 
         tree_frame = ctk.CTkFrame(self.frame, fg_color="transparent")
@@ -143,12 +160,12 @@ class MatchupTab:
         return filters
 
     def _rebuild_tree(self) -> None:
-        for iid in self.tree.get_children():
-            self.tree.delete(iid)
+        children = self.tree.get_children()
+        if children:
+            self.tree.delete(*children)
 
-        # ソートキー決定
         col = self._sort_col
-        if col in ("first_wr", "second_wr", "total_wr"):
+        if col in _WR_COLS:
             key_fn = lambda r: (_sort_key(r[col]), r["deck"])
         elif col == "deck":
             from database import _ja_key
@@ -156,9 +173,7 @@ class MatchupTab:
         else:
             key_fn = lambda r: (r[col], r["deck"])
 
-        rows = sorted(self._rows, key=key_fn, reverse=self._sort_rev)
-
-        for r in rows:
+        for r in sorted(self._rows, key=key_fn, reverse=self._sort_rev):
             self.tree.insert("", "end", values=(
                 r["deck"],
                 r["total_n"],
@@ -167,6 +182,7 @@ class MatchupTab:
                 r["first_wr"],
                 r["second_n"],
                 r["second_wr"],
+                r["second_adv"],
             ))
 
         total_battles = sum(r["total_n"] for r in self._rows)
@@ -182,11 +198,13 @@ class MatchupTab:
         except ValueError:
             min_n = 1
 
-        # 相手デッキ × 先後攻 で集計
+        mode = self._axis_var.get()  # "opponent" or "own"
+
         stats: dict = defaultdict(lambda: {"f_n": 0, "f_w": 0,
                                             "s_n": 0, "s_w": 0})
         for b in battles:
-            key = b["opponent_deck"] or "（不明）"
+            key = (b["opponent_deck"] or "（不明）") if mode == "opponent" \
+                  else (b["deck_name"] or "（削除済み）")
             is_win = b["result"] == "勝利"
             if b["first_second"] == "先攻":
                 stats[key]["f_n"] += 1
@@ -201,15 +219,23 @@ class MatchupTab:
             if total_n < min_n:
                 continue
             total_w = s["f_w"] + s["s_w"]
+            # 後攻有利% = 後攻プレイヤーが勝った割合
+            # = (自分後攻勝利 + 自分先攻敗北) / 総試合
+            second_adv = _pct(s["s_w"] + (s["f_n"] - s["f_w"]), total_n)
             self._rows.append({
-                "deck":      deck,
-                "total_n":   total_n,
-                "total_wr":  _pct(total_w, total_n),
-                "first_n":   s["f_n"],
-                "first_wr":  _pct(s["f_w"], s["f_n"]),
-                "second_n":  s["s_n"],
-                "second_wr": _pct(s["s_w"], s["s_n"]),
+                "deck":       deck,
+                "total_n":    total_n,
+                "total_wr":   _pct(total_w, total_n),
+                "first_n":    s["f_n"],
+                "first_wr":   _pct(s["f_w"], s["f_n"]),
+                "second_n":   s["s_n"],
+                "second_wr":  _pct(s["s_w"], s["s_n"]),
+                "second_adv": second_adv,
             })
+
+        # デッキ列ヘッダを軸に合わせて更新
+        self.tree.heading("deck",
+                          text="相手デッキ" if mode == "opponent" else "自デッキ")
 
         self._rebuild_tree()
 
@@ -219,9 +245,12 @@ class MatchupTab:
         for v in self.rank_vars.values():
             v.set(False)
         self.min_n_var.set("1")
+        self._axis_var.set("opponent")
         self._rows = []
-        for iid in self.tree.get_children():
-            self.tree.delete(iid)
+        children = self.tree.get_children()
+        if children:
+            self.tree.delete(*children)
+        self.tree.heading("deck", text="相手デッキ")
         self.count_label.configure(text="")
 
     def _sort_by(self, col: str) -> None:
@@ -230,9 +259,8 @@ class MatchupTab:
         else:
             self._sort_col = col
             # 勝率列は昇順（苦手順）をデフォルト、それ以外は降順
-            self._sort_rev = col not in ("first_wr", "second_wr", "total_wr",
-                                          "deck")
+            self._sort_rev = col not in _WR_COLS | {"deck"}
         self._rebuild_tree()
 
     def apply_theme(self, colors: dict) -> None:
-        pass   # Treeview の行タグは使わないためここでは何もしない
+        pass
