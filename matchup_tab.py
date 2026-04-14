@@ -14,12 +14,12 @@ _FONT_BOLD = ("Meiryo", 10, "bold")
 _COL_CFG = [
     # (column_id,  header,       width, anchor)
     ("deck",       "相手デッキ", 160,   "w"),
-    ("total_n",    "総合\n試合", 54,    "center"),
-    ("total_wr",   "総合\n勝率", 66,    "center"),
-    ("first_n",    "先攻\n試合", 54,    "center"),
-    ("first_wr",   "先攻\n勝率", 66,    "center"),
-    ("second_n",   "後攻\n試合", 54,    "center"),
-    ("second_wr",  "後攻\n勝率", 66,    "center"),
+    ("total_n",    "総合試合",   60,    "center"),
+    ("total_wr",   "総合勝率",   72,    "center"),
+    ("first_n",    "先攻試合",   60,    "center"),
+    ("first_wr",   "先攻勝率",   72,    "center"),
+    ("second_n",   "後攻試合",   60,    "center"),
+    ("second_wr",  "後攻勝率",   72,    "center"),
 ]
 
 
