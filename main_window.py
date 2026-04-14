@@ -161,4 +161,5 @@ class MainWindow:
 
     def _on_close(self) -> None:
         self.color_monitor_tab.save_settings()
-        self.root.quit()
+        self.root.withdraw()  # 即座にウィンドウを隠す（体感速度向上）
+        self.root.quit()      # mainloop を終了 → main.py で os._exit(0)

@@ -61,6 +61,10 @@ def main() -> None:
 
     MainWindow(root)
     root.mainloop()
+    # mainloop が返った後、CTk ウィジェットの GC による破棄を待たずに即終了。
+    # root.quit() だけだと GC が __del__ で全ウィジェットを destroy しようとして
+    # 他のアプリも止まるほど CPU を使う。os._exit はスレッドを含め即座に終了する。
+    os._exit(0)
 
 
 if __name__ == "__main__":
