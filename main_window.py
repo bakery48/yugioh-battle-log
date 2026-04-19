@@ -177,10 +177,19 @@ class MainWindow:
         if self.color_monitor_tab is not None:
             self.color_monitor_tab.save_settings()
         # TerminateProcess bypasses DLL DllMain(DETACH) cleanup which can take
-        # several seconds (Tcl/Tk, pywin32, numpy/OpenBLAS, etc.)
+        # several seconds (Tcl/Tk, pywin32, numpy/OpenBLAS, etc.).
+        # Must set argtypes/restype so the 64-bit HANDLE isn't truncated — a
+        # truncated handle causes TerminateProcess to silently return FALSE.
         try:
             import ctypes
-            ctypes.windll.kernel32.TerminateProcess(
-                ctypes.windll.kernel32.GetCurrentProcess(), 0)
+            from ctypes import wintypes
+            k32 = ctypes.windll.kernel32
+            k32.GetCurrentProcess.restype  = wintypes.HANDLE
+            k32.TerminateProcess.argtypes  = [wintypes.HANDLE, wintypes.UINT]
+            k32.TerminateProcess.restype   = wintypes.BOOL
+            k32.TerminateProcess(k32.GetCurrentProcess(), 0)
         except Exception:
-            os._exit(0)
+            pass
+        # Fallback: if TerminateProcess returned (meaning it failed) or
+        # raised, exit via the CRT path so the app still closes.
+        os._exit(0)
