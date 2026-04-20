@@ -83,21 +83,32 @@ class MatchupTab:
             ttk.Checkbutton(rank_inner, text=rank, variable=var).pack(
                 side="left", padx=3)
 
+        # 相手デッキ絞り込み
+        ttk.Label(ff, text="相手デッキ:").grid(
+            row=2, column=0, sticky="e", padx=(0, 4), pady=3)
+        self.opp_deck_var = tk.StringVar()
+        self.opp_deck_combo = ttk.Combobox(
+            ff, textvariable=self.opp_deck_var, width=26, state="readonly")
+        self.opp_deck_combo.grid(row=2, column=1, columnspan=3, sticky="w", padx=2)
+        ttk.Button(ff, text="クリア",
+                   command=lambda: self.opp_deck_var.set(""),
+                   width=5).grid(row=2, column=4, padx=(4, 0))
+
         # 最小対戦数
         ttk.Label(ff, text="最小対戦数:").grid(
-            row=2, column=0, sticky="e", padx=(0, 4), pady=3)
+            row=3, column=0, sticky="e", padx=(0, 4), pady=3)
         self.min_n_var = tk.StringVar(value="1")
         ttk.Entry(ff, textvariable=self.min_n_var, width=6).grid(
-            row=2, column=1, sticky="w")
+            row=3, column=1, sticky="w")
         ttk.Label(ff, text="戦以上を表示", foreground="gray").grid(
-            row=2, column=2, columnspan=2, sticky="w", padx=2)
+            row=3, column=2, columnspan=2, sticky="w", padx=2)
 
         # 分析軸
         ttk.Label(ff, text="分析軸:").grid(
-            row=3, column=0, sticky="e", padx=(0, 4), pady=3)
+            row=4, column=0, sticky="e", padx=(0, 4), pady=3)
         self._axis_var = tk.StringVar(value="opponent")
         axis_inner = ttk.Frame(ff)
-        axis_inner.grid(row=3, column=1, columnspan=6, sticky="w")
+        axis_inner.grid(row=4, column=1, columnspan=6, sticky="w")
         ttk.Radiobutton(axis_inner, text="相手デッキ別",
                         variable=self._axis_var, value="opponent").pack(
             side="left", padx=(0, 16))
@@ -106,7 +117,7 @@ class MatchupTab:
 
         # ボタン
         btn_row = ttk.Frame(ff)
-        btn_row.grid(row=4, column=0, columnspan=7, pady=(6, 0))
+        btn_row.grid(row=5, column=0, columnspan=7, pady=(6, 0))
         ttk.Button(btn_row, text="集計", command=self.calculate).pack(
             side="left", padx=6)
         ttk.Button(btn_row, text="リセット", command=self.reset).pack(
@@ -184,9 +195,21 @@ class MatchupTab:
         self.count_label.configure(
             text=f"{len(self._rows)} デッキ  /  総 {total_battles} 戦")
 
+    def refresh_opp_deck_list(self) -> None:
+        current = self.opp_deck_var.get()
+        values = db.get_distinct_opponent_decks()
+        self.opp_deck_combo["values"] = values
+        if current and current not in values:
+            self.opp_deck_var.set("")
+
     def calculate(self) -> None:
+        self.refresh_opp_deck_list()
         filters = self._get_filters()
         battles = db.get_battles(filters or None)
+
+        opp_filter = self.opp_deck_var.get().strip()
+        if opp_filter:
+            battles = [b for b in battles if b["opponent_deck"] == opp_filter]
 
         try:
             min_n = max(1, int(self.min_n_var.get()))
@@ -228,9 +251,14 @@ class MatchupTab:
                 "second_adv": second_adv,
             })
 
-        # デッキ列ヘッダを軸に合わせて更新
-        self.tree.heading("deck",
-                          text="相手デッキ" if mode == "opponent" else "自デッキ")
+        # デッキ列ヘッダを軸と絞り込みに合わせて更新
+        if mode == "opponent":
+            heading = "相手デッキ"
+        elif opp_filter:
+            heading = f"自デッキ (vs {opp_filter})"
+        else:
+            heading = "自デッキ"
+        self.tree.heading("deck", text=heading)
 
         self._rebuild_tree()
 
@@ -239,6 +267,7 @@ class MatchupTab:
         self.date_to_var.set("")
         for v in self.rank_vars.values():
             v.set(False)
+        self.opp_deck_var.set("")
         self.min_n_var.set("1")
         self._axis_var.set("opponent")
         self._rows = []
