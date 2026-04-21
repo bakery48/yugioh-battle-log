@@ -204,6 +204,24 @@ def get_all_strength_tags() -> list:
         conn.close()
 
 
+def delete_weakness_tag(name: str) -> None:
+    conn = _get_conn()
+    try:
+        conn.execute("DELETE FROM weakness_tags WHERE name = ?", (name,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_strength_tag(name: str) -> None:
+    conn = _get_conn()
+    try:
+        conn.execute("DELETE FROM strength_tags WHERE name = ?", (name,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def add_deck(name: str, tag_ids: Optional[list] = None,
              weakness_tag_names: Optional[list] = None,
              strength_tag_names: Optional[list] = None) -> int:

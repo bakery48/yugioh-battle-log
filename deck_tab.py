@@ -167,6 +167,10 @@ class DeckTab:
         self.frame.wait_window(dlg.top)
         if dlg.result:
             try:
+                for n in dlg.result.get("deleted_weakness_tag_names", []):
+                    db.delete_weakness_tag(n)
+                for n in dlg.result.get("deleted_strength_tag_names", []):
+                    db.delete_strength_tag(n)
                 db.add_deck(dlg.result["name"], dlg.result["tag_ids"],
                             dlg.result["weakness_tag_names"],
                             dlg.result["strength_tag_names"])
@@ -194,6 +198,10 @@ class DeckTab:
         self.frame.wait_window(dlg.top)
         if dlg.result:
             try:
+                for n in dlg.result.get("deleted_weakness_tag_names", []):
+                    db.delete_weakness_tag(n)
+                for n in dlg.result.get("deleted_strength_tag_names", []):
+                    db.delete_strength_tag(n)
                 db.update_deck(deck_id, dlg.result["name"], dlg.result["tag_ids"],
                                dlg.result["weakness_tag_names"],
                                dlg.result["strength_tag_names"])

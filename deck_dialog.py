@@ -111,6 +111,8 @@ class DeckDialog:
         self._weakness_outer = ttk.Frame(frame)
         self._weakness_outer.grid(row=1, column=1, sticky="w", padx=px, pady=py)
         self._wtag_vars: dict = {}
+        self._wtag_rows: dict = {}
+        self._wtag_deleted: set = set()
         self._wtag_check_frame = ttk.Frame(self._weakness_outer)
         self._wtag_check_frame.pack(anchor="w")
         selected_wnames = {t["name"] for t in deck["weakness_tags"]} if deck else set()
@@ -132,6 +134,8 @@ class DeckDialog:
         self._strength_outer = ttk.Frame(frame)
         self._strength_outer.grid(row=2, column=1, sticky="w", padx=px, pady=py)
         self._stag_vars: dict = {}
+        self._stag_rows: dict = {}
+        self._stag_deleted: set = set()
         self._stag_check_frame = ttk.Frame(self._strength_outer)
         self._stag_check_frame.pack(anchor="w")
         selected_snames = {t["name"] for t in deck["strength_tags"]} if deck else set()
@@ -168,12 +172,24 @@ class DeckDialog:
             return
         var = tk.BooleanVar(value=checked)
         self._wtag_vars[name] = var
-        ttk.Checkbutton(self._wtag_check_frame, text=name,
-                        variable=var).pack(anchor="w")
+        row = ttk.Frame(self._wtag_check_frame)
+        row.pack(anchor="w")
+        self._wtag_rows[name] = row
+        ttk.Checkbutton(row, text=name, variable=var).pack(side="left")
+        ttk.Button(row, text="×", width=2,
+                   command=lambda n=name: self._delete_wtag(n)).pack(
+            side="left", padx=(4, 0))
+
+    def _delete_wtag(self, name: str) -> None:
+        if name in self._wtag_rows:
+            self._wtag_rows.pop(name).destroy()
+        self._wtag_vars.pop(name, None)
+        self._wtag_deleted.add(name)
 
     def _add_wtag(self) -> None:
         name = self._wtag_entry_var.get().strip()
         if name:
+            self._wtag_deleted.discard(name)   # 削除後に再追加できるよう
             self._add_weakness_checkbox(name, checked=True)
             self._wtag_entry_var.set("")
 
@@ -184,12 +200,24 @@ class DeckDialog:
             return
         var = tk.BooleanVar(value=checked)
         self._stag_vars[name] = var
-        ttk.Checkbutton(self._stag_check_frame, text=name,
-                        variable=var).pack(anchor="w")
+        row = ttk.Frame(self._stag_check_frame)
+        row.pack(anchor="w")
+        self._stag_rows[name] = row
+        ttk.Checkbutton(row, text=name, variable=var).pack(side="left")
+        ttk.Button(row, text="×", width=2,
+                   command=lambda n=name: self._delete_stag(n)).pack(
+            side="left", padx=(4, 0))
+
+    def _delete_stag(self, name: str) -> None:
+        if name in self._stag_rows:
+            self._stag_rows.pop(name).destroy()
+        self._stag_vars.pop(name, None)
+        self._stag_deleted.add(name)
 
     def _add_stag(self) -> None:
         name = self._stag_entry_var.get().strip()
         if name:
+            self._stag_deleted.discard(name)   # 削除後に再追加できるよう
             self._add_strength_checkbox(name, checked=True)
             self._stag_entry_var.set("")
 
@@ -206,6 +234,8 @@ class DeckDialog:
             "tag_ids": [tid for tid, var in self.tag_vars.items() if var.get()],
             "weakness_tag_names": [n for n, v in self._wtag_vars.items() if v.get()],
             "strength_tag_names": [n for n, v in self._stag_vars.items() if v.get()],
+            "deleted_weakness_tag_names": list(self._wtag_deleted),
+            "deleted_strength_tag_names": list(self._stag_deleted),
         }
         self.top.withdraw()
         self.top.destroy()
